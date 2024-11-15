@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS stock_symbol (
 );
 -- Daily Price table
 CREATE TABLE IF NOT EXISTS daily_price (
-  symbol VARCHAR(10) PRIMARY KEY,
+  symbol VARCHAR(10),
   date DATE NOT NULL,
   open DECIMAL(10, 2),
   high DECIMAL(10, 2),
@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS daily_price (
 CREATE INDEX IF NOT EXISTS idx_daily_price_symbol_date ON daily_price(symbol, date);
 -- Income Statement table
 CREATE TABLE IF NOT EXISTS income_statement (
-  symbol VARCHAR(10) PRIMARY KEY,
+  symbol VARCHAR(10),
   date DATE NOT NULL,
   period VARCHAR(10) NOT NULL,
   calendar_year VARCHAR(4),
@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS income_statement (
 CREATE INDEX IF NOT EXISTS idx_income_statement_symbol_date ON income_statement(symbol, date);
 -- Balance Sheet table
 CREATE TABLE IF NOT EXISTS balance_sheet (
-  symbol VARCHAR(10) PRIMARY KEY,
+  symbol VARCHAR(10),
   date DATE NOT NULL,
   period VARCHAR(10) NOT NULL,
   calendar_year VARCHAR(4),
@@ -86,7 +86,7 @@ CREATE TABLE IF NOT EXISTS balance_sheet (
 CREATE INDEX IF NOT EXISTS idx_balance_sheet_symbol_date ON balance_sheet(symbol, date);
 -- Cash Flow table
 CREATE TABLE IF NOT EXISTS cash_flow (
-  symbol VARCHAR(10) PRIMARY KEY,
+  symbol VARCHAR(10),
   date DATE NOT NULL,
   period VARCHAR(10) NOT NULL,
   calendar_year VARCHAR(4),
@@ -116,3 +116,79 @@ CREATE TABLE IF NOT EXISTS cash_flow (
   PRIMARY KEY (symbol, date, period)
 );
 CREATE INDEX IF NOT EXISTS idx_cash_flow_symbol_date ON cash_flow(symbol, date);
+-- Company Metrics table
+CREATE TABLE IF NOT EXISTS metrics (
+  symbol TEXT,
+  date TEXT,
+  calendar_year INTEGER,
+  period TEXT,
+  revenue_per_share REAL,
+  net_income_per_share REAL,
+  operating_cash_flow_per_share REAL,
+  free_cash_flow_per_share REAL,
+  cash_per_share REAL,
+  book_value_per_share REAL,
+  tangible_book_value_per_share REAL,
+  shareholders_equity_per_share REAL,
+  interest_debt_per_share REAL,
+  debt_to_equity REAL,
+  debt_to_assets REAL,
+  net_debt_to_EBITDA REAL,
+  current_ratio REAL,
+  interest_coverage REAL,
+  income_quality REAL,
+  payout_ratio REAL,
+  sga_to_revenue REAL,
+  rnd_to_revenue REAL,
+  intangibles_to_total_assets REAL,
+  capex_to_operating_cash_flow REAL,
+  capex_to_revenue REAL,
+  capex_to_depreciation REAL,
+  stock_based_compensation_to_revenue REAL,
+  graham_number REAL,
+  roic REAL,
+  return_on_tangible_assets REAL,
+  graham_net_net REAL,
+  working_capital REAL,
+  tangible_asset_value REAL,
+  net_current_asset_value REAL,
+  invested_capital REAL,
+  days_sales_outstanding REAL,
+  days_payables_outstanding REAL,
+  days_inventory_onhand REAL,
+  receivables_turnover REAL,
+  payables_turnover REAL,
+  inventory_turnover REAL,
+  roe REAL,
+  capex_per_share REAL,
+  quick_ratio REAL,
+  cash_ratio REAL,
+  operating_cycle REAL,
+  cash_conversion_cycle REAL,
+  gross_profit_margin REAL,
+  operating_profit_margin REAL,
+  pretax_profit_margin REAL,
+  net_profit_margin REAL,
+  effective_tax_rate REAL,
+  return_on_assets REAL,
+  return_on_capital_employed REAL,
+  net_income_per_ebt REAL,
+  ebt_per_ebit REAL,
+  ebit_per_revenue REAL,
+  debt_ratio REAL,
+  long_term_debt_to_capitalization REAL,
+  total_debt_to_capitalization REAL,
+  cash_flow_to_debt_ratio REAL,
+  company_equity_multiplier REAL,
+  fixed_asset_turnover REAL,
+  asset_turnover REAL,
+  operating_cash_flow_sales_ratio REAL,
+  free_cash_flow_operating_cash_flow_ratio REAL,
+  cash_flow_coverage_ratios REAL,
+  short_term_coverage_ratios REAL,
+  capital_expenditure_coverage_ratio REAL,
+  dividend_paid_and_capex_coverage_ratio REAL,
+  price_fair_value REAL,
+  PRIMARY KEY (symbol, date)
+);
+CREATE INDEX idx_metrics_calendar_year_period ON metrics(symbol, calendar_year, period);

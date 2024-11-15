@@ -1,3 +1,4 @@
+import asyncio
 from .base_fmp_crawler import BaseFMPCrawler
 from typing import List, Dict, Any
 import time
@@ -7,17 +8,6 @@ class SymbolCrawler(BaseFMPCrawler):
     async def crawl(self):
         self.logger.info("Starting symbol crawling...")
         start_time = time.time()
-
-        # Create table if not exists
-        self.db.execute('''
-            CREATE TABLE IF NOT EXISTS stock_symbol (
-                symbol VARCHAR(10) PRIMARY KEY,
-                name VARCHAR(255),
-                exchange VARCHAR(255),
-                exchange_short_name VARCHAR(255),
-                type VARCHAR(255)
-            )
-        ''')
 
         # Fetch symbols
         symbols = await self.make_request('stock/list')

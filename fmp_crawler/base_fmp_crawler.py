@@ -40,47 +40,60 @@ class BaseFMPCrawler:
         if params is None:
             params = {}
         params['apikey'] = self.api_key
-        
+
         # Rate limiting
         now = time.time()
         time_since_last = now - self.last_request_time
         if time_since_last < self.rate_limit_delay:
             await asyncio.sleep(self.rate_limit_delay - time_since_last)
-        
+
         url = f"{self.base_url}/{endpoint}"
-        
+
         for attempt in range(3):
             try:
                 async with aiohttp.ClientSession() as session:
                     async with session.get(url, params=params) as response:
                         self.last_request_time = time.time()
-                        
+
                         if response.status == 200:
                             return await response.json()
                         else:
                             error_msg = f"API request failed: {response.status} - {await response.text()}"
                             self.logger.error(f"URL: {url} - {error_msg}")
-                            
+
                         if attempt < 2:  # Don't sleep on last attempt
                             await asyncio.sleep(5)
-                            
+
             except Exception as e:
                 self.logger.error(f"URL: {url} - Error: {str(e)}")
                 if attempt < 2:
                     await asyncio.sleep(5)
-        
+
         return None
 
     def check_missing_fields(self, data: Dict[str, Any], required_fields: List[str], symbol: str):
-        missing = [field for field in required_fields if field not in data or data[field] is None]
+        missing = [
+            field for field in required_fields if field not in data or data[field] is None]
         if missing:
-            self.logger.warning(f"Symbol {symbol} missing fields: {', '.join(missing)}")
+            self.logger.warning(
+                f"Symbol {symbol} missing fields: {', '.join(missing)}")
             # Log to file
             timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             with open('missing_data.log', 'a') as f:
-                f.write(f"{timestamp} - Symbol: {symbol}, Missing fields: {', '.join(missing)}\n")
+                f.write(
+                    f"{timestamp} - Symbol: {symbol}, Missing fields: {', '.join(missing)}\n")
 
     def close(self):
         """Close the database connection"""
         if hasattr(self, 'db'):
             self.db.close()
+
+    def get_symbols_to_crawl(self):
+        """Get list of symbols to crawl from the database"""
+        cursor = self.db.cursor()
+        cursor.execute('''
+            SELECT symbol FROM stock_symbol 
+            WHERE exchange_short_name IN ('NYSE', 'NASDAQ', 'AMEX')
+            AND type = 'stock'
+        ''')
+        return [row['symbol'] for row in cursor.fetchall()]
