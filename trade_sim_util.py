@@ -66,6 +66,60 @@ class FMPPriceLoader:
         self.cursor = self.conn.cursor()
         self.price_cache = {}
 
+    def get_last_available_price(self, symbol, start_date, price_type='Close'):
+        """Get the last available price before or on the given date.
+        
+        Args:
+            symbol (str): Stock symbol
+            start_date (str): Date to search from in YYYY-MM-DD format
+            price_type (str): Type of price ('Open', 'High', 'Low', 'Close')
+            
+        Returns:
+            tuple: (price, date) - The price and the date it was found on
+            
+        Raises:
+            ValueError: If price_type is invalid
+            KeyError: If no price data found for the symbol
+        """
+        # Convert datetime or date object to string format if needed
+        if isinstance(start_date, (datetime, date)):
+            start_date = start_date.strftime('%Y-%m-%d')
+
+        # Convert price_type to database column name (lowercase)
+        price_column = price_type.lower()
+        if price_column not in ['open', 'high', 'low', 'close']:
+            raise ValueError("price_type must be one of 'Open', 'High', 'Low', 'Close'")
+
+        # For Close price type, use adjusted_close
+        if price_type == 'Close':
+            self.cursor.execute("""
+                SELECT adjusted_close as price, date
+                FROM daily_price
+                WHERE symbol = ? AND date <= ?
+                ORDER BY date DESC
+                LIMIT 1
+            """, (symbol, start_date))
+        else:
+            # For other price types, get both raw price and adjustment ratio
+            self.cursor.execute(f"""
+                SELECT {price_column} as raw_price,
+                       adjusted_close / close as adj_ratio,
+                       date
+                FROM daily_price
+                WHERE symbol = ? AND date <= ?
+                ORDER BY date DESC
+                LIMIT 1
+            """, (symbol, start_date))
+
+        result = self.cursor.fetchone()
+        if not result:
+            raise KeyError(f"No price data found for {symbol}")
+
+        if price_type == 'Close':
+            return float(result['price']), result['date']
+        else:
+            return float(result['raw_price'] * result['adj_ratio']), result['date']
+
     def get_price(self, symbol, date_str, price_type='Close'):
         """Get adjusted price for a symbol on a specific date.
         
