@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import argparse
 import logging
 from tqdm.auto import tqdm
-from trade_sim_util import PriceLoader
+from trade_sim_util import FMPPriceLoader
 
 stock_data_folder = 'stock_data'
 initial_fund = 1000000
@@ -61,7 +61,7 @@ def get_price_with_delisted(price_loader, symbol, date, price_type, portfolio):
     Get price data with fallback handling for delisted stocks.
     
     Args:
-        price_loader: PriceLoader instance
+        price_loader: FMPPriceLoader instance
         symbol: Stock symbol
         date: Date to get price for
         price_type: Type of price ('Open', 'High', 'Low', 'Close')
@@ -110,7 +110,7 @@ def backtest_trading(trading_ops, initial_fund, end_day, plot=False, return_hist
     portfolio_values = []
     dates = []
 
-    price_loader = PriceLoader()
+    price_loader = FMPPriceLoader()
 
     # Process trading operations
     for op in tqdm(trading_ops, desc="Processing trades"):
