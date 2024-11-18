@@ -9,12 +9,12 @@ from typing import Optional, Dict, Any, List
 
 
 class BaseFMPCrawler:
-    def __init__(self):
+    def __init__(self, api_version: str = 'v3'):
         self.api_key = os.getenv('FMP_API_KEY')
         if not self.api_key:
             raise ValueError("FMP_API_KEY environment variable not set")
 
-        self.base_url = "https://financialmodelingprep.com/api/v3"
+        self.base_url = f"https://financialmodelingprep.com/api/{api_version}"
         self.last_request_time = 0
         self.rate_limit_delay = 0.25  # 4 requests per second
 

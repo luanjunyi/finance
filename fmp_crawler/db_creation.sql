@@ -192,3 +192,14 @@ CREATE TABLE IF NOT EXISTS metrics (
   PRIMARY KEY (symbol, date)
 );
 CREATE INDEX idx_metrics_calendar_year_period ON metrics(symbol, calendar_year, period);
+
+CREATE TABLE IF NOT EXISTS owner_earnings (
+  symbol VARCHAR(10) NOT NULL,
+  date DATE NOT NULL,
+  averagePPE DECIMAL(10, 5),
+  maintenanceCapex BIGINT,
+  ownersEarnings BIGINT,
+  growthCapex BIGINT,
+  ownersEarningsPerShare DECIMAL(10, 2),
+  PRIMARY KEY (symbol, date)
+);

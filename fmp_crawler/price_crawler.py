@@ -6,15 +6,6 @@ from tqdm import tqdm
 
 
 class PriceCrawler(BaseFMPCrawler):
-    def get_symbols_to_crawl(self):
-        cursor = self.db.cursor()
-        cursor.execute('''
-            SELECT symbol FROM stock_symbol 
-            WHERE exchange_short_name IN ('NYSE', 'NASDAQ', 'AMEX')
-            AND type = 'stock'
-        ''')
-        return [row['symbol'] for row in cursor.fetchall()]
-
     async def crawl_symbol_prices(self, symbol: str, from_date: str, to_date: str):
         prices = await self.make_request(
             f'historical-price-full/{symbol}',
@@ -55,21 +46,6 @@ class PriceCrawler(BaseFMPCrawler):
     async def crawl(self):
         self.logger.info("Starting price crawling...")
         start_time = time.time()
-
-        # Create table if not exists
-        self.db.execute('''
-            CREATE TABLE IF NOT EXISTS daily_price (
-                symbol VARCHAR(10),
-                date DATE NOT NULL,
-                open DECIMAL(10,2),
-                high DECIMAL(10,2),
-                low DECIMAL(10,2),
-                close DECIMAL(10,2),
-                adjusted_close DECIMAL(10,2),
-                volume BIGINT,
-                UNIQUE(symbol, date)
-            )
-        ''')
 
         symbols = self.get_symbols_to_crawl()
         to_date = datetime.now().strftime('%Y-%m-%d')
