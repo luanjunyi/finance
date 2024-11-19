@@ -6,6 +6,7 @@ import asyncio
 import sqlite3
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
+from utils.logging_config import setup_logging as setup_global_logging
 
 
 class BaseFMPCrawler:
@@ -18,7 +19,7 @@ class BaseFMPCrawler:
         self.last_request_time = 0
         self.rate_limit_delay = 0.25  # 4 requests per second
 
-        # Setup logging
+        # Setup logging with filename and line numbers
         self.setup_logging()
 
         # Setup database
@@ -27,14 +28,7 @@ class BaseFMPCrawler:
 
     def setup_logging(self):
         """Configure logging for the crawler"""
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s [%(filename)s:%(lineno)d] - %(levelname)s - %(message)s',
-            handlers=[
-                logging.StreamHandler(),
-            ]
-        )
-        self.logger = logging.getLogger(self.__class__.__name__)
+        setup_global_logging()
 
     async def make_request(self, endpoint: str, params: Optional[Dict[str, Any]] = None) -> Optional[Any]:
         if params is None:
@@ -59,13 +53,13 @@ class BaseFMPCrawler:
                             return await response.json()
                         else:
                             error_msg = f"API request failed: {response.status} - {await response.text()}"
-                            self.logger.error(f"URL: {url} - {error_msg}")
+                            logging.error(f"URL: {url} - {error_msg}")
 
                         if attempt < 2:  # Don't sleep on last attempt
                             await asyncio.sleep(5)
 
             except Exception as e:
-                self.logger.error(f"URL: {url} - Error: {str(e)}")
+                logging.error(f"URL: {url} - Error: {str(e)}")
                 if attempt < 2:
                     await asyncio.sleep(5)
 
@@ -75,7 +69,7 @@ class BaseFMPCrawler:
         missing = [
             field for field in required_fields if field not in data or data[field] is None]
         if missing:
-            self.logger.warning(
+            logging.warning(
                 f"Symbol {symbol} missing fields: {', '.join(missing)}")
             # Log to file
             timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')

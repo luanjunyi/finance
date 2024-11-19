@@ -19,7 +19,7 @@ class OwnerEarningsCrawler(BaseFMPCrawler):
         )
 
         if not owner_earnings:
-            self.logger.error(f"Failed to fetch owner earnings for {symbol}")
+            logging.error(f"Failed to fetch owner earnings for {symbol}")
             with open('missing_data.log', 'a') as log_file:
                 log_file.write(f"{symbol}: Missing owner earnings\n")
             return
@@ -44,11 +44,11 @@ class OwnerEarningsCrawler(BaseFMPCrawler):
                     earnings.get('ownersEarningsPerShare')
                 ))
             except Exception as e:
-                self.logger.error(
+                logging.error(
                     f"Error inserting owner earnings for {symbol} on {earnings.get('date')}: {str(e)}")
 
     async def crawl(self):
-        self.logger.info("Starting owner earnings crawling...")
+        logging.info("Starting owner earnings crawling...")
         start_time = time.time()
 
         symbols = self.get_symbols_to_crawl()
@@ -58,7 +58,7 @@ class OwnerEarningsCrawler(BaseFMPCrawler):
             self.db.commit()
 
         elapsed = time.time() - start_time
-        self.logger.info(
+        logging.info(
             f"Owner earnings crawling completed in {elapsed:.2f} seconds")
 
 

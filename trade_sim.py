@@ -7,10 +7,13 @@ import argparse
 import logging
 from tqdm.auto import tqdm
 from trade_sim_util import FMPPriceLoader
+from utils.logging_config import setup_logging
 
 stock_data_folder = 'stock_data'
 initial_fund = 1000000
 
+# Set up logging with filename and line numbers
+setup_logging()
 
 def plot_portfolio_value(dates, portfolio_values):
     plt.figure(figsize=(10, 6))

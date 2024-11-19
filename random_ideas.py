@@ -8,11 +8,10 @@ import logging
 from statistics import mean, median
 from datetime import datetime, timedelta
 import argparse
+from utils.logging_config import setup_logging
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
+# Set up logging with filename and line numbers
+setup_logging()
 
 def parse_args():
     """Parse command line arguments"""

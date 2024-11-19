@@ -3,7 +3,10 @@ import os
 from datetime import datetime, date
 import logging
 import sqlite3
+from utils.logging_config import setup_logging
 
+# Set up logging with filename and line numbers
+setup_logging()
 
 class PriceLoader:
     """

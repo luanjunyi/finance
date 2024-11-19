@@ -2,17 +2,18 @@ import asyncio
 from .base_fmp_crawler import BaseFMPCrawler
 from typing import List, Dict, Any
 import time
+import logging
 
 
 class SymbolCrawler(BaseFMPCrawler):
     async def crawl(self):
-        self.logger.info("Starting symbol crawling...")
+        logging.info("Starting symbol crawling...")
         start_time = time.time()
 
         # Fetch symbols
         symbols = await self.make_request('stock/list')
         if not symbols:
-            self.logger.error("Failed to fetch symbols")
+            logging.error("Failed to fetch symbols")
             return
 
         # Filter and insert symbols
@@ -37,13 +38,13 @@ class SymbolCrawler(BaseFMPCrawler):
                     symbol.get('type')
                 ))
             except Exception as e:
-                self.logger.error(
+                logging.error(
                     f"Error inserting symbol {symbol.get('symbol')}: {str(e)}")
 
         self.db.commit()
 
         elapsed = time.time() - start_time
-        self.logger.info(f"Symbol crawling completed in {elapsed:.2f} seconds")
+        logging.info(f"Symbol crawling completed in {elapsed:.2f} seconds")
 
 
 async def main():

@@ -1,6 +1,7 @@
 from .base_fmp_crawler import BaseFMPCrawler
 import time
 import asyncio
+import logging
 from tqdm import tqdm
 
 
@@ -21,7 +22,7 @@ class FinancialCrawler(BaseFMPCrawler):
         )
 
         if not data:
-            self.logger.error(f"Failed to fetch income statement for {symbol}")
+            logging.error(f"Failed to fetch income statement for {symbol}")
             return
 
         cursor = self.db.cursor()
@@ -73,7 +74,7 @@ class FinancialCrawler(BaseFMPCrawler):
         )
 
         if not data:
-            self.logger.error(f"Failed to fetch balance sheet for {symbol}")
+            logging.error(f"Failed to fetch balance sheet for {symbol}")
             return
 
         cursor = self.db.cursor()
@@ -135,7 +136,7 @@ class FinancialCrawler(BaseFMPCrawler):
         )
 
         if not data:
-            self.logger.error(f"Failed to fetch cash flow for {symbol}")
+            logging.error(f"Failed to fetch cash flow for {symbol}")
             return
 
         cursor = self.db.cursor()
@@ -192,7 +193,7 @@ class FinancialCrawler(BaseFMPCrawler):
             ))
 
     async def crawl(self):
-        self.logger.info("Starting financial crawling...")
+        logging.info("Starting financial crawling...")
         start_time = time.time()
 
         symbols = self.get_symbols_to_crawl()
@@ -204,7 +205,7 @@ class FinancialCrawler(BaseFMPCrawler):
             self.db.commit()
 
         elapsed = time.time() - start_time
-        self.logger.info(
+        logging.info(
             f"Financial crawling completed in {elapsed:.2f} seconds")
 
 

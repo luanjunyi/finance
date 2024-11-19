@@ -2,6 +2,7 @@ import asyncio
 from .base_fmp_crawler import BaseFMPCrawler
 from datetime import datetime, timedelta
 import time
+import logging
 from tqdm import tqdm
 
 
@@ -13,7 +14,7 @@ class PriceCrawler(BaseFMPCrawler):
         )
 
         if not prices or 'historical' not in prices:
-            self.logger.error(f"Failed to fetch prices for {symbol}")
+            logging.error(f"Failed to fetch prices for {symbol}")
             return
 
         cursor = self.db.cursor()
@@ -40,11 +41,11 @@ class PriceCrawler(BaseFMPCrawler):
                     price.get('volume')
                 ))
             except Exception as e:
-                self.logger.error(
+                logging.error(
                     f"Error inserting price for {symbol} on {price.get('date')}: {str(e)}")
 
     async def crawl(self):
-        self.logger.info("Starting price crawling...")
+        logging.info("Starting price crawling...")
         start_time = time.time()
 
         symbols = self.get_symbols_to_crawl()
@@ -57,7 +58,7 @@ class PriceCrawler(BaseFMPCrawler):
             self.db.commit()
 
         elapsed = time.time() - start_time
-        self.logger.info(f"Price crawling completed in {elapsed:.2f} seconds")
+        logging.info(f"Price crawling completed in {elapsed:.2f} seconds")
 
 
 async def main():

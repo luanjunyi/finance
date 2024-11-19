@@ -21,7 +21,7 @@ class MetricsCrawler(BaseFMPCrawler):
         )
 
         if not metrics or not ratios:
-            self.logger.error(f"Failed to fetch metrics/ratios for {symbol}")
+            logging.error(f"Failed to fetch metrics/ratios for {symbol}")
             with open('missing_data.log', 'a') as log_file:
                 if not metrics:
                     log_file.write(f"{symbol}: Missing metrics\n")
@@ -158,11 +158,11 @@ class MetricsCrawler(BaseFMPCrawler):
                         combined.get('priceFairValue')
                     ))
                 except Exception as e:
-                    self.logger.error(
+                    logging.error(
                         f"Error inserting metrics for {symbol} on {date}: {str(e)}")
 
     async def crawl(self):
-        self.logger.info("Starting metrics crawling...")
+        logging.info("Starting metrics crawling...")
         start_time = time.time()
 
         symbols = self.get_symbols_to_crawl()
@@ -172,7 +172,7 @@ class MetricsCrawler(BaseFMPCrawler):
             self.db.commit()
 
         elapsed = time.time() - start_time
-        self.logger.info(
+        logging.info(
             f"Metrics crawling completed in {elapsed:.2f} seconds")
 
 
