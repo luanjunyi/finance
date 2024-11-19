@@ -8,6 +8,7 @@ from utils.logging_config import setup_logging
 # Set up logging with filename and line numbers
 setup_logging()
 
+
 class PriceLoader:
     """
     **DEPRECATED**
@@ -15,6 +16,7 @@ class PriceLoader:
     This class is deprecated because the data quality from Yahoo finance is inferior to FMP's data.
     Please use `FMPPriceLoader` instead.
     """
+
     def __init__(self):
         """Initialize with an empty cache for price data"""
         self.price_cache = {}
@@ -62,24 +64,33 @@ class PriceLoader:
 
 
 class FMPPriceLoader:
-    def __init__(self):
-        """Initialize database connection"""
-        self.conn = sqlite3.connect('fmp_data.db')
+    def __init__(self, db_path: str = '/Users/jluan/code/finance/fmp_data.db'):
+        """Initialize database connection
+
+        Args:
+            db_path (str): Path to the SQLite database file. Defaults to '/Users/jluan/code/finance/fmp_data.db'
+
+        Raises:
+            FileNotFoundError: If the database file doesn't exist
+        """
+        if not os.path.exists(db_path):
+            raise FileNotFoundError(f"FMP Database file not found: {db_path}")
+
+        self.conn = sqlite3.connect(db_path)
         self.conn.row_factory = sqlite3.Row
         self.cursor = self.conn.cursor()
-        self.price_cache = {}
 
     def get_last_available_price(self, symbol, start_date, price_type='Close'):
         """Get the last available price before or on the given date.
-        
+
         Args:
             symbol (str): Stock symbol
             start_date (str): Date to search from in YYYY-MM-DD format
             price_type (str): Type of price ('Open', 'High', 'Low', 'Close')
-            
+
         Returns:
             tuple: (price, date) - The price and the date it was found on
-            
+
         Raises:
             ValueError: If price_type is invalid
             KeyError: If no price data found for the symbol
@@ -91,7 +102,8 @@ class FMPPriceLoader:
         # Convert price_type to database column name (lowercase)
         price_column = price_type.lower()
         if price_column not in ['open', 'high', 'low', 'close']:
-            raise ValueError("price_type must be one of 'Open', 'High', 'Low', 'Close'")
+            raise ValueError(
+                "price_type must be one of 'Open', 'High', 'Low', 'Close'")
 
         # For Close price type, use adjusted_close
         if price_type == 'Close':
@@ -125,11 +137,11 @@ class FMPPriceLoader:
 
     def get_price(self, symbol, date_str, price_type='Close'):
         """Get adjusted price for a symbol on a specific date.
-        
+
         All prices returned are adjusted for splits and dividends to be consistent
         with the CSV data. The adjustment uses the formula:
             adjusted_price = price * adjusted_close / close
-        
+
         For Close price type, returns the adjusted_close directly.
         For other price types (Open, High, Low), applies the adjustment formula.
 
@@ -152,7 +164,8 @@ class FMPPriceLoader:
         # Convert price_type to database column name (lowercase)
         price_column = price_type.lower()
         if price_column not in ['open', 'high', 'low', 'close']:
-            raise ValueError("price_type must be one of 'Open', 'High', 'Low', 'Close'")
+            raise ValueError(
+                "price_type must be one of 'Open', 'High', 'Low', 'Close'")
 
         # For Close price type, return adjusted_close directly
         if price_type == 'Close':
@@ -161,7 +174,7 @@ class FMPPriceLoader:
                 FROM daily_price
                 WHERE symbol = ? AND date = ?
             """, (symbol, date_str))
-            
+
             result = self.cursor.fetchone()
             if result and result['price'] is not None:
                 return float(result['price'])
@@ -185,7 +198,7 @@ class FMPPriceLoader:
                 FROM daily_price
                 WHERE symbol = ? AND date = ?
             """, (symbol, date_str))
-            
+
             result = self.cursor.fetchone()
             if result and result['raw_price'] is not None:
                 return float(result['raw_price'] * result['adj_ratio'])
@@ -209,7 +222,8 @@ class FMPPriceLoader:
             else:
                 return float(result['raw_price'] * result['adj_ratio'])
 
-        raise KeyError(f"No price data found for {symbol} on {date_str} or within 4 previous days")
+        raise KeyError(
+            f"No price data found for {symbol} on {date_str} or within 4 previous days")
 
     def __del__(self):
         """Close database connection when object is destroyed"""
