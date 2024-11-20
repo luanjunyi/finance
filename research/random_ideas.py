@@ -22,8 +22,8 @@ def parse_args():
 
 def hold_days_after_buy(csv_file, days):
     """
-    Calculate the return after holding for specified number of days after each BUY operation.
-    Return is calculated as (ClosePrice_after_days / BuyDayOpenPrice - 1)
+    Calculate the normalized daily return after holding for specified number of days after each BUY operation.
+    Return is normalized using the formula: (1 + total_return)^(1/days_held) - 1
     If the target close date is not available, uses the last available price.
     
     Args:
@@ -31,7 +31,7 @@ def hold_days_after_buy(csv_file, days):
         days (int): Number of days to hold after buying
         
     Returns:
-        DataFrame: DataFrame containing returns for each BUY operation
+        DataFrame: DataFrame containing normalized daily returns for each BUY operation
     """
     # Read the CSV file
     df = pd.read_csv(csv_file, names=['Symbol', 'Date', 'Operation', 'Amount'])
@@ -68,12 +68,24 @@ def hold_days_after_buy(csv_file, days):
             
             # Calculate return
             total_return = (close_price / open_price) - 1
+            
+            # Calculate actual days held
+            actual_datetime = datetime.strptime(actual_date, '%Y-%m-%d')
+            actual_days_held = (actual_datetime - buy_datetime).days
+            
+            # Calculate normalized daily return
+            if actual_days_held <= 0:
+                raise ValueError(f"Actual days held must be greater than 0, but got {actual_days_held}")
+            normalized_return = ((1 + total_return) ** (1.0 / actual_days_held) - 1)
+            
             returns.append({
                 'symbol': symbol,
                 'buy_date': buy_date,
                 'sell_date': actual_date,
                 'target_date': target_date,
-                'return': total_return * 100,  # Convert to percentage
+                'days_held': actual_days_held,
+                'raw_return': total_return * 100,  # Convert to percentage
+                'normalized_return': normalized_return * 100,  # Convert to percentage
                 'used_last_available': actual_date != target_date
             })
         except Exception as e:
@@ -84,14 +96,14 @@ def hold_days_after_buy(csv_file, days):
     returns_df = pd.DataFrame(returns)
     
     # Calculate statistics
-    avg_return = mean(returns_df['return'])
-    med_return = median(returns_df['return'])
+    avg_return = mean(returns_df['normalized_return'])
+    med_return = median(returns_df['normalized_return'])
     
     # Print summary statistics
     logging.info(f"\nSummary Statistics for {days}-day hold period:")
     logging.info(f"Number of BUY operations analyzed: {len(returns_df)}")
-    logging.info(f"Average return: {avg_return:.2f}%")
-    logging.info(f"Median return: {med_return:.2f}%")
+    logging.info(f"Average normalized daily return: {avg_return:.2f}%")
+    logging.info(f"Median normalized daily return: {med_return:.2f}%")
     
     # Count operations using last available price
     if not returns_df.empty:
@@ -108,12 +120,12 @@ def hold_days_after_buy(csv_file, days):
     plt.figure(figsize=(10, 6))
     
     # Calculate symmetric range around 0 for x-axis
-    max_abs_return = max(abs(returns_df['return'].max()), abs(returns_df['return'].min()))
+    max_abs_return = max(abs(returns_df['normalized_return'].max()), abs(returns_df['normalized_return'].min()))
     bin_range = (-max_abs_return, max_abs_return)
     
-    plt.hist(returns_df['return'], bins=30, edgecolor='black', range=bin_range)
-    plt.title(f'Distribution of {days}-Day Hold Returns')
-    plt.xlabel('Return (%)')
+    plt.hist(returns_df['normalized_return'], bins=30, edgecolor='black', range=bin_range)
+    plt.title(f'Distribution of {days}-Day Hold Normalized Daily Returns')
+    plt.xlabel('Normalized Daily Return (%)')
     plt.ylabel('Frequency')
     
     # Add vertical lines for mean, median, and zero
