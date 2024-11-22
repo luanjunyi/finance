@@ -1,4 +1,5 @@
 import asyncio
+import argparse
 from .base_fmp_crawler import BaseFMPCrawler
 from datetime import datetime, timedelta
 import time
@@ -44,11 +45,13 @@ class PriceCrawler(BaseFMPCrawler):
                 logging.error(
                     f"Error inserting price for {symbol} on {price.get('date')}: {str(e)}")
 
-    async def crawl(self):
+    async def crawl(self, symbols=None):
         logging.info("Starting price crawling...")
         start_time = time.time()
 
-        symbols = self.get_symbols_to_crawl()
+        if symbols is None:
+            symbols = self.get_symbols_to_crawl()
+        
         to_date = datetime.now().strftime('%Y-%m-%d')
         from_date = (datetime.now() - timedelta(days=365*30)
                      ).strftime('%Y-%m-%d')
@@ -62,8 +65,12 @@ class PriceCrawler(BaseFMPCrawler):
 
 
 async def main():
+    parser = argparse.ArgumentParser(description='Crawl stock prices from FMP')
+    parser.add_argument('--symbols', nargs='+', help='List of stock symbols to crawl. If not provided, will crawl all symbols from the database.')
+    args = parser.parse_args()
+
     crawler = PriceCrawler()
-    await crawler.crawl()
+    await crawler.crawl(args.symbols)
     crawler.close()
 
 if __name__ == "__main__":
