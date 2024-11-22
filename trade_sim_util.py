@@ -19,6 +19,7 @@ class PriceLoader:
 
     def __init__(self):
         """Initialize with an empty cache for price data"""
+        raise ValueError("PriceLoader is deprecated. Please use FMPPriceLoader instead.")
         self.price_cache = {}
 
     def get_price(self, symbol, date_str, price_type='Close'):
@@ -224,6 +225,66 @@ class FMPPriceLoader:
 
         raise KeyError(
             f"No price data found for {symbol} on {date_str} or within 4 previous days")
+
+    def get_close_price_during(self, symbol, start_date, end_date,):
+        """Get price range for a symbol between start_date and end_date
+
+        Args:
+            symbol (str): Stock symbol
+            start_date (str): Start date in YYYY-MM-DD format
+            end_date (str): End date in YYYY-MM-DD format
+
+        Returns:
+            dict: Dictionary keyed by date with price data
+
+        Raises:
+            KeyError: If no price data found for the symbol
+        """
+        # Convert datetime or date object to string format if needed
+        if isinstance(start_date, (datetime, date)):
+            start_date = start_date.strftime('%Y-%m-%d')
+
+        if isinstance(end_date, (datetime, date)):
+            end_date = end_date.strftime('%Y-%m-%d')
+
+        self.cursor.execute("""
+            SELECT date, adjusted_close
+            FROM daily_price
+            WHERE symbol = ? AND date >= ? AND date <= ?
+            ORDER BY date ASC
+        """, (symbol, start_date, end_date))
+
+        return {row['date']: row['adjusted_close'] for row in self.cursor.fetchall()}
+
+    def get_close_price_for_the_last_days(self, symbol, last_date, num_days):
+        """
+        Get price range for a symbol for the last num_days days starting from
+        last_date (inclusive)
+
+        Args:
+            symbol (str): Stock symbol
+            last_date (str): Last date in YYYY-MM-DD format
+            num_days (int): Number of days to get price for
+
+        Returns:
+            dict: Dictionary keyed by date with price data
+        """
+        # Convert datetime or date object to string format if needed
+        if isinstance(last_date, (datetime, date)):
+            last_date = last_date.strftime('%Y-%m-%d')
+
+
+        self.cursor.execute("""
+            SELECT date, adjusted_close
+            FROM daily_price
+            WHERE symbol = ? AND date <= ?
+            ORDER BY date DESC
+            LIMIT ?
+        """, (symbol, last_date, num_days))
+
+        return {row['date']: row['adjusted_close'] for row in self.cursor.fetchall()}        
+
+        
 
     def __del__(self):
         """Close database connection when object is destroyed"""
