@@ -4,13 +4,11 @@ from trade_sim_util import FMPPriceLoader
 class BaseFeature:
     def __init__(self, symbol):
         self.symbol = symbol
-        self.value = None
         self.price_loader = FMPPriceLoader()
     
+    @cached_property
     def value(self):
-        if self.value is None:
-            self.value = self.calculate()
-        return self.value
+        return self.calculate()
 
     def calculate(self):
         raise NotImplementedError
