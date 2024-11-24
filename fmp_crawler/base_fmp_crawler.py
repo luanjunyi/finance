@@ -23,7 +23,7 @@ class BaseFMPCrawler:
         self.setup_logging()
 
         # Setup database
-        self.db = sqlite3.connect('fmp_data.db')
+        self.db = sqlite3.connect('/Users/jluan/code/financedata/fmp_data.db')
         self.db.row_factory = sqlite3.Row
 
     def setup_logging(self):

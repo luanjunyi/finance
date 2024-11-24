@@ -26,7 +26,7 @@ def get_random_symbols(n=400):
 
 def get_date_range():
     """Get 10 random dates between 2022-02-01 and 2024-11-01 that exist in the database"""
-    conn = sqlite3.connect('fmp_data.db')
+    conn = sqlite3.connect('data/fmp_data.db')
     cursor = conn.cursor()
     
     # Get all dates in our range that exist in the database

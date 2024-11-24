@@ -65,11 +65,11 @@ class PriceLoader:
 
 
 class FMPPriceLoader:
-    def __init__(self, db_path: str = '/Users/jluan/code/finance/fmp_data.db'):
+    def __init__(self, db_path: str = '/Users/jluan/code/finance/data/fmp_data.db'):
         """Initialize database connection
 
         Args:
-            db_path (str): Path to the SQLite database file. Defaults to '/Users/jluan/code/finance/fmp_data.db'
+            db_path (str): Path to the SQLite database file. Defaults to '/Users/jluan/code/finance/data/fmp_data.db'
 
         Raises:
             FileNotFoundError: If the database file doesn't exist
