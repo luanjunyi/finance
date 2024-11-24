@@ -142,6 +142,99 @@ def hold_days_after_buy(csv_file, days):
     
     return returns_df
 
+def twr(df, end_date=None):
+    """
+    Calculate Time-Weighted Return (TWR) for a portfolio based on period weights.
+    
+    Args:
+        df (pd.DataFrame): DataFrame containing at least columns: period, symbol, portfolio_weight
+        end_date (str, optional): End date for evaluation in YYYY-MM-DD format. Defaults to current date.
+    
+    Returns:
+        tuple: (total_return, period_returns_dict) where:
+            - total_return (float): The Time-Weighted Return as a decimal (e.g., 0.10 for 10% return)
+            - period_returns_dict (dict): Maps period start dates to their returns as decimals
+    """
+    if end_date is None:
+        end_date = datetime.now().strftime('%Y-%m-%d')
+    
+    # Sort by period and group
+    periods = sorted(df['period'].unique())
+    
+    # Initialize price loader
+    price_loader = FMPPriceLoader()
+    period_returns = []
+    period_returns_dict = {}
+    missing = set()
+    
+    for i in range(len(periods) - 1):
+        current_period = periods[i]
+        next_period = periods[i + 1]
+        
+        # Get current period portfolio
+        current_portfolio = df[df['period'] == current_period].copy()
+        
+        # Normalize weights to sum to 1.0
+        total_weight = current_portfolio['portfolio_weight'].sum()
+        current_portfolio['normalized_weight'] = current_portfolio['portfolio_weight'] / total_weight
+        
+        # Calculate return for this period
+        period_return = 0
+        for _, row in current_portfolio.iterrows():
+            try:
+                # Get prices at the start and end of period
+                start_price = price_loader.get_last_available_price(row['symbol'], current_period)[0]
+                end_price = price_loader.get_last_available_price(row['symbol'], next_period)[0]
+                
+                # Calculate weighted return for this stock
+                stock_return = (end_price / start_price - 1) * row['normalized_weight']
+                period_return += stock_return
+                
+            except Exception as e:
+                logging.warning(f"Failed to get prices for {row['symbol']} between {current_period} and {next_period}: {e}")
+                missing.add((current_period, row['symbol'], row['normalized_weight']))
+                
+                continue
+        
+        period_returns.append(1 + period_return)
+        period_returns_dict[current_period] = period_return
+    
+    # Handle the last period to end_date if there are any periods
+    if len(periods) > 0:
+        last_period = periods[-1]
+        last_portfolio = df[df['period'] == last_period].copy()
+        
+        # Normalize weights for last period
+        total_weight = last_portfolio['portfolio_weight'].sum()
+        last_portfolio['normalized_weight'] = last_portfolio['portfolio_weight'] / total_weight
+        
+        # Calculate return for final period
+        final_return = 0
+        for _, row in last_portfolio.iterrows():
+            try:
+                start_price = price_loader.get_last_available_price(row['symbol'], last_period)[0]
+                end_price = price_loader.get_last_available_price(row['symbol'], end_date)[0]
+                
+                stock_return = (end_price / start_price - 1) * row['normalized_weight']
+                final_return += stock_return
+                
+            except Exception as e:
+                logging.warning(f"Failed to get prices for {row['symbol']} between {last_period} and {end_date}: {e}")
+                continue
+        
+        period_returns.append(1 + final_return)
+        period_returns_dict[last_period] = final_return
+    
+    # Calculate TWR by multiplying all period returns
+    if not period_returns:
+        raise ValueError("No periods found")
+    
+    total_return = np.prod(period_returns) - 1
+    print('Missing the following stock price:')
+    for period, symbol, weight in missing:
+        print(f"{period}, {symbol}, Weight: {weight*100:.2f}%")
+    return total_return, period_returns_dict
+
 if __name__ == '__main__':
     args = parse_args()
     returns = hold_days_after_buy(args.input_file, args.days)

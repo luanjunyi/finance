@@ -148,9 +148,6 @@ class PortfolioCrawler:
             except Exception as e:
                 logging.error(f"Error parsing change: {e}")
                 df['change'] = float('nan')
-            
-            # Add metadata
-            df['crawl_timestamp'] = datetime.now()
 
 async def main():   
     parser = argparse.ArgumentParser(description='Crawl portfolio data from ValueSider')
