@@ -3,7 +3,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
-from trade_sim_util import FMPPriceLoader
+from fmp_data import FMPPriceLoader
 import logging
 from statistics import mean, median
 from datetime import datetime, timedelta

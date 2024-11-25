@@ -1,5 +1,5 @@
 from functools import cached_property
-from trade_sim_util import FMPPriceLoader
+from fmp_data import FMPPriceLoader
 
 class BaseFeature:
     def __init__(self, symbol):

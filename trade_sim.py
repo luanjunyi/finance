@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import argparse
 import logging
 from tqdm.auto import tqdm
-from trade_sim_util import FMPPriceLoader
+from fmp_data import FMPPriceLoader
 from utils.logging_config import setup_logging
 
 stock_data_folder = 'stock_data'

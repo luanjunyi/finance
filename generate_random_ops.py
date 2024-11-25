@@ -3,7 +3,7 @@ import os
 import random
 import logging
 from datetime import datetime
-from trade_sim_util import PriceLoader
+from fmp_data import FMPPriceLoader
 
 
 class RandomOperationsGenerator:
@@ -16,7 +16,7 @@ class RandomOperationsGenerator:
         """
         self.start_date = start_date
         self.end_date = end_date
-        self.price_loader = PriceLoader()
+        self.price_loader = FMPPriceLoader()
         self.available_symbols = self._get_available_symbols()
         
         if not self.available_symbols:
@@ -34,7 +34,7 @@ class RandomOperationsGenerator:
 
             symbol = f.replace('_daily.csv', '')
             try:
-                # Get start and end prices using PriceLoader
+                # Get start and end prices using FMPPriceLoader
                 start_price = self.price_loader.get_price(symbol, self.start_date)
                 end_price = self.price_loader.get_price(symbol, self.end_date)
                 
