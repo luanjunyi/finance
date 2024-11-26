@@ -191,7 +191,8 @@ CREATE TABLE IF NOT EXISTS metrics (
   price_fair_value REAL,
   PRIMARY KEY (symbol, date)
 );
-CREATE INDEX idx_metrics_calendar_year_period ON metrics(symbol, calendar_year, period);
+CREATE INDEX IF NOT EXISTS idx_metrics_calendar_year_period ON metrics(symbol, calendar_year, period);
+CREATE INDEX IF NOT EXISTS idx_metrics_symbol ON metrics(symbol);
 
 CREATE TABLE IF NOT EXISTS owner_earnings (
   symbol VARCHAR(10) NOT NULL,
@@ -203,3 +204,4 @@ CREATE TABLE IF NOT EXISTS owner_earnings (
   ownersEarningsPerShare DECIMAL(10, 2),
   PRIMARY KEY (symbol, date)
 );
+CREATE INDEX IF NOT EXISTS idx_owner_earnings_symbol ON owner_earnings(symbol);

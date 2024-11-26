@@ -2,11 +2,120 @@ import pandas as pd
 import os
 from datetime import datetime, date
 import logging
+from typing import List, Dict
 import sqlite3
 from utils.logging_config import setup_logging
 
 # Set up logging with filename and line numbers
 setup_logging()
+
+class Dataset:
+    def __init__(self, symbol: str, metrics: List[str], rename: Dict[str, str] = {}, db_path: str = '/Users/jluan/code/finance/data/fmp_data.db'):
+        """Initialize Dataset object.
+        
+        Args:
+            symbol (str): Stock symbol
+            metrics (List[str]): List of metrics to fetch
+            rename (Dict[str, str]): Dictionary to rename columns in the result DataFrame. Keys are original column names, values are new names.
+            db_path (str): Path to SQLite database
+        
+        Attributes:
+            data (pd.DataFrame): The dataset as a pandas DataFrame.
+            symbol (str): Stock symbol.
+            metrics (List[str]): List of metrics to fetch.
+            rename (Dict[str, str]): Dictionary to rename columns in the result DataFrame.
+            db_path (str): Path to SQLite database.
+        """
+        self.symbol = symbol
+        self.metrics = metrics
+        self.rename = rename
+        self.db_path = db_path
+        self.data = self.build()
+
+    def __getattr__(self, name):
+        """Delegate any unknown attributes/methods to the underlying pandas DataFrame."""
+        return getattr(self.data, name)
+        
+    def __getitem__(self, key):
+        """Enable DataFrame-style indexing."""
+        return self.data.__getitem__(key)
+
+    def _get_table_columns(self) -> dict:
+        """Get all columns from all tables in the database."""
+        tables = ['daily_price', 'income_statement', 'balance_sheet', 'cash_flow', 'metrics']
+        columns = {}
+        
+        with sqlite3.connect(self.db_path) as conn:
+            for table in tables:
+                cursor = conn.execute(f'PRAGMA table_info({table})')
+                columns[table] = [row[1] for row in cursor.fetchall()]
+                
+        return columns
+
+    def _find_metric_locations(self) -> dict:
+        """Find which tables contain each requested metric."""
+        table_columns = self._get_table_columns()
+        metric_locations = {}
+        
+        for metric in self.metrics:
+            locations = []
+            for table, columns in table_columns.items():
+                if metric in columns:
+                    locations.append(table)
+            
+            if not locations:
+                logging.warning(f"Metric '{metric}' not found in any table")
+            elif len(locations) > 1:
+                logging.warning(f"Metric '{metric}' found in multiple tables: {locations}. Using {locations[0]}")
+                metric_locations[metric] = locations[0]
+            else:
+                metric_locations[metric] = locations[0]
+                
+        return metric_locations
+
+    def build(self) -> pd.DataFrame:
+        """Build and return the dataset as a pandas DataFrame."""
+        metric_locations = self._find_metric_locations()
+        if not metric_locations:
+            raise ValueError("None of the requested metrics were found in the database")
+
+        # Group metrics by table
+        table_metrics = {}
+        for metric, table in metric_locations.items():
+            if table not in table_metrics:
+                table_metrics[table] = []
+            table_metrics[table].append(metric)
+
+        # Query each table and merge results
+        dfs = []
+        with sqlite3.connect(self.db_path) as conn:
+            for table, metrics in table_metrics.items():
+                query = f"""
+                SELECT date, {', '.join(metrics)}
+                FROM {table}
+                WHERE symbol = ?
+                ORDER BY date
+                """
+                df = pd.read_sql_query(query, conn, params=(self.symbol,))
+                dfs.append(df)
+
+        # Merge all dataframes on date
+        if len(dfs) == 1:
+            result = dfs[0]
+        else:
+            result = dfs[0]
+            for df in dfs[1:]:
+                result = pd.merge(result, df, on='date', how='outer')
+
+        # Rename columns if specified
+        if self.rename:
+            result = result.rename(columns=self.rename)
+
+        return result.sort_values('date')
+
+    def get_data(self) -> pd.DataFrame:
+        """Return the dataset."""
+        return self.data
 
 
 class FMPPriceLoader:
