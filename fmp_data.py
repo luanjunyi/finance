@@ -145,7 +145,7 @@ class Dataset:
         # Handle price metrics if requested
         if len(set(PRICE_METRICS) & set(self.metrics)) > 0:
             # Get all dates from the result DataFrame or query them if no regular metrics
-            assert not result.empty, f"Requested {self.metrics} which are " \
+            assert not result.empty, f"Requested {self.metrics} for {self.symbol} which are " \
                 "pure for joining with metrics. For pure price data, use close, open, adjusted close, etc."
 
             # Get price data for these dates
@@ -229,7 +229,7 @@ class FMPPriceLoader:
 
         return float(result['adj_price'])
 
-   def get_last_available_price(self, symbol, start_date, price_type='close'):
+    def get_last_available_price(self, symbol, start_date, price_type='close'):
         """Get the last available price before or on the start date.
 
         Args:
