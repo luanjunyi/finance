@@ -14,26 +14,24 @@ AFTER_PRICE = 'after_price'
 PRICE_METRICS = {BEFORE_PRICE, AFTER_PRICE}
 
 class Dataset:
-    def __init__(self, symbol: Union[str, List[str]], metrics: List[str], rename: Dict[str, str] = {}, db_path: str = '/Users/jluan/code/finance/data/fmp_data.db'):
+    def __init__(self, symbol: Union[str, List[str]], metrics: Dict[str, str], db_path: str = '/Users/jluan/code/finance/data/fmp_data.db'):
         """Initialize Dataset object.
         
         Args:
             symbol (Union[str, List[str]]): Stock symbol or list of stock symbols
-            metrics (List[str]): List of metrics to fetch
-            rename (Dict[str, str]): Dictionary to rename columns in the result DataFrame. Keys are original column names, values are new names.
+            metrics (Dict[str, str]): Dictionary mapping metrics to their renamed columns. 
+                                    If value is empty string or None, the original metric name is used.
             db_path (str): Path to SQLite database
         
         Attributes:
             data (pd.DataFrame): The dataset as a pandas DataFrame.
             symbol (Union[str, List[str]]): Stock symbol(s).
-            metrics (List[str]): List of metrics to fetch.
-            rename (Dict[str, str]): Dictionary to rename columns in the result DataFrame.
+            metrics (Dict[str, str]): Dictionary mapping metrics to their renamed columns.
             db_path (str): Path to SQLite database.
         """
 
         self.symbol = [symbol] if isinstance(symbol, str) else symbol
         self.metrics = metrics
-        self.rename = rename
         self.db_path = db_path
         self.data = self.build()
 
@@ -62,7 +60,7 @@ class Dataset:
         table_columns = self._get_table_columns()
         metric_locations = {}
         
-        for metric in self.metrics:
+        for metric in self.metrics.keys():
             if metric in PRICE_METRICS:
                 continue
             locations = []
@@ -88,7 +86,7 @@ class Dataset:
         Returns:
             pd.DataFrame: DataFrame with price metrics for each date
         """
-        requested_price_metrics = set(self.metrics) & PRICE_METRICS
+        requested_price_metrics = set(self.metrics.keys()) & PRICE_METRICS
 
         price_loader = FMPPriceLoader(self.db_path)
         price_data = []
@@ -143,7 +141,7 @@ class Dataset:
             result = pd.merge(result, df, on=['date', 'symbol'], how='outer')
 
         # Handle price metrics if requested
-        if len(set(PRICE_METRICS) & set(self.metrics)) > 0:
+        if len(set(PRICE_METRICS) & set(self.metrics.keys())) > 0:
             # Get all dates from the result DataFrame or query them if no regular metrics
             assert not result.empty, f"Requested {self.metrics} for {self.symbol} which are " \
                 "pure for joining with metrics. For pure price data, use close, open, adjusted close, etc."
@@ -164,8 +162,9 @@ class Dataset:
                     result = pd.merge(result, price_df, on=['date', 'symbol'], how='outer')
 
         # Rename columns if specified
-        if self.rename:
-            result = result.rename(columns=self.rename)
+        rename_dict = {k: v for k, v in self.metrics.items() if v and v is not None}
+        if rename_dict:
+            result = result.rename(columns=rename_dict)
 
         return result.sort_values(['symbol', 'date'])
 
