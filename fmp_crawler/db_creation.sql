@@ -4,7 +4,9 @@ CREATE TABLE IF NOT EXISTS stock_symbol (
   name VARCHAR(255),
   exchange VARCHAR(255),
   exchange_short_name VARCHAR(255),
-  type VARCHAR(255)
+  type VARCHAR(255),
+  sector VARCHAR(255),
+  industry VARCHAR(255),
 );
 -- Daily Price table
 CREATE TABLE IF NOT EXISTS daily_price (
@@ -193,7 +195,6 @@ CREATE TABLE IF NOT EXISTS metrics (
 );
 CREATE INDEX IF NOT EXISTS idx_metrics_calendar_year_period ON metrics(symbol, calendar_year, period);
 CREATE INDEX IF NOT EXISTS idx_metrics_symbol ON metrics(symbol);
-
 CREATE TABLE IF NOT EXISTS owner_earnings (
   symbol VARCHAR(10) NOT NULL,
   date DATE NOT NULL,

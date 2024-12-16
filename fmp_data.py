@@ -270,7 +270,48 @@ class FMPPriceLoader:
         """, (symbol, start_date))
 
         result = self.cursor.fetchone()
-        return float(result['adj_price']), result['date']        
+        if not result:
+            raise KeyError(
+                f"Historical price of {symbol} for {start_date} or earliernot found")
+        return float(result['adj_price']), result['date']       
+
+
+    def get_next_available_price(self, symbol, start_date, price_type='close'):
+        """Get the next available price after or on the start date.
+
+        Args:
+            symbol (str): Stock symbol
+            start_date (str): Date to get price for in YYYY-MM-DD format
+            price_type (str): Type of price ('open', 'high', 'low', 'close')
+
+        Returns:
+            tuple: (price, date) where price is the adjusted price and date is
+                  the actual date of the price
+
+        Raises:
+            ValueError: If price_type is invalid
+            KeyError: If no price data found
+        """
+        # Convert datetime or date object to string format if needed
+        if isinstance(start_date, (datetime, date)):
+            start_date = start_date.strftime('%Y-%m-%d')
+
+        # Convert price_type to database column name (lowercase)
+        price_column = price_type.lower()
+        if price_column not in ['open', 'high', 'low', 'close', 'adjusted_close']:
+            raise ValueError(
+                "price_type must be one of 'Open', 'High', 'Low', 'Close', 'adjusted_close'")
+
+        self.cursor.execute(f"""
+            SELECT {price_column} * (adjusted_close / close) as adj_price, date
+            FROM daily_price
+            WHERE symbol = ? AND date >= ?
+            ORDER BY date ASC
+            LIMIT 1
+        """, (symbol, start_date))
+
+        result = self.cursor.fetchone()
+        return float(result['adj_price']), result['date']         
 
 
     def get_close_price_during(self, symbol, start_date, end_date,):
@@ -330,43 +371,6 @@ class FMPPriceLoader:
         """, (symbol, last_date, num_days))
 
         return {row['date']: row['adjusted_close'] for row in self.cursor.fetchall()}        
-
-    def get_next_available_price(self, symbol, start_date, price_type='close'):
-        """Get the next available price after or on the start date.
-
-        Args:
-            symbol (str): Stock symbol
-            start_date (str): Date to get price for in YYYY-MM-DD format
-            price_type (str): Type of price ('open', 'high', 'low', 'close')
-
-        Returns:
-            tuple: (price, date) where price is the adjusted price and date is
-                  the actual date of the price
-
-        Raises:
-            ValueError: If price_type is invalid
-            KeyError: If no price data found
-        """
-        # Convert datetime or date object to string format if needed
-        if isinstance(start_date, (datetime, date)):
-            start_date = start_date.strftime('%Y-%m-%d')
-
-        # Convert price_type to database column name (lowercase)
-        price_column = price_type.lower()
-        if price_column not in ['open', 'high', 'low', 'close', 'adjusted_close']:
-            raise ValueError(
-                "price_type must be one of 'Open', 'High', 'Low', 'Close', 'adjusted_close'")
-
-        self.cursor.execute(f"""
-            SELECT {price_column} * (adjusted_close / close) as adj_price, date
-            FROM daily_price
-            WHERE symbol = ? AND date >= ?
-            ORDER BY date ASC
-            LIMIT 1
-        """, (symbol, start_date))
-
-        result = self.cursor.fetchone()
-        return float(result['adj_price']), result['date']
 
     def __del__(self):
         """Close database connection when object is destroyed"""
