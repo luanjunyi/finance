@@ -236,7 +236,7 @@ class FMPPriceLoader:
         return float(result['adj_price'])
 
     def get_last_available_price(self, symbol, start_date, price_type='close'):
-        """Get the last available price before or on the start date.
+        """Get the last available **adjusted** price before or on the start date.
 
         Args:
             symbol (str): Stock symbol

@@ -27,67 +27,6 @@ def plot_portfolio_value(dates, portfolio_values):
     plt.show()
 
 
-def get_price(symbol, date, price_type):
-    assert price_type in ['Open', 'High', 'Low',
-                          'Close'], "price_type must be one of 'Open', 'High', 'Low', 'Close'"
-
-    stock_file = os.path.join(stock_data_folder, f"{symbol}_daily.csv")
-    if not os.path.exists(stock_file):
-        raise FileNotFoundError(
-            f"Error: Stock data file not found for {symbol}")
-
-    try:
-        stock_data = pd.read_csv(stock_file)
-        stock_data['Date'] = pd.to_datetime(
-            stock_data['Date'], utc=True).dt.date
-        stock_data = stock_data.set_index('Date')
-    except Exception as e:
-        raise Exception(f"Error reading stock data file for {symbol}: {e}")
-
-    if date not in stock_data.index:
-        for i in range(1, 5):
-            new_date = date - pd.Timedelta(days=i)
-            if new_date in stock_data.index:
-                date = new_date
-                logging.debug(
-                    f"No date {date} for {symbol}, using {new_date} instead")
-                break
-        else:
-            raise KeyError(
-                f"Date {date} not found in historical data for {symbol} and no recent data within 4 days")
-
-    return stock_data.loc[date, price_type]
-
-
-def get_price_with_delisted(price_loader, symbol, date, price_type, portfolio):
-    """
-    Get price data with fallback handling for delisted stocks.
-    
-    Args:
-        price_loader: FMPPriceLoader instance
-        symbol: Stock symbol
-        date: Date to get price for
-        price_type: Type of price ('Open', 'High', 'Low', 'Close')
-        portfolio: Current portfolio dictionary
-    """
-    default_prices = {
-        'TA': 156.87,
-        'LTHM': 68.26,
-    }
-
-    try:
-        return price_loader.get_price(symbol, date, price_type)
-    except KeyError:
-        if symbol in portfolio:
-            if symbol in default_prices:
-                logging.debug(f"Used default price for listed stocks found for {symbol}")
-                return default_prices[symbol]
-            else:
-                raise KeyError(f"Default price for delisted stocks not found for {symbol}")
-        else:
-            raise FileNotFoundError(f"Error: Stock data file not found for {symbol} and symbol not in portfolio")
-
-
 def read_trading_ops(trading_ops_file):
     """Read trading operations from a CSV file and return as a list."""
     with open(trading_ops_file, 'r') as file:
@@ -95,7 +34,7 @@ def read_trading_ops(trading_ops_file):
         return [row for row in reader]
 
 
-def backtest_trading(trading_ops, initial_fund, end_day, plot=False, return_history=False):
+def backtest_trading(trading_ops, initial_fund, end_day, use_open_price_for_buy=False, plot=False, return_history=False):
     """
     Run trading simulation based on a list of trading operations.
 
@@ -129,16 +68,33 @@ def backtest_trading(trading_ops, initial_fund, end_day, plot=False, return_hist
         current_value = fund
         for sym, sh in portfolio.items():
             if sh > 0:
-                current_price = get_price_with_delisted(
-                    price_loader, sym, date, 'Open', portfolio)
+                try:
+                    current_price, used_date = price_loader.get_last_available_price(sym, date, 'close')
+                except Exception as e:
+                    raise Exception(
+                        f"Error getting price for {sym} on {date}: {str(e)}")
+                if date.strftime('%Y-%m-%d') != used_date:
+                    logging.warning(
+                        f"Before execution portfolio value calculation used prevoious day price for {sym}, used {used_date} instead of {date}")
                 current_value += sh * current_price
 
-        price_type = 'Open' if action == 'BUY' else 'Close'
-        price = get_price_with_delisted(price_loader, symbol, date, price_type, portfolio)
+        price_type = 'close'
+        try:
+            price, date_used = price_loader.get_next_available_price(symbol, date, price_type)
+        except Exception as e:
+            raise Exception(
+                f"Error getting price for {symbol} on {date}: {str(e)}")
+        if date.strftime('%Y-%m-%d') != date_used:
+            logging.warning(
+                f"Buying used next day price for {symbol}, used {date_used} instead of {date}")
+
+        # Calculate and store the portfolio value BEFORE the trade
 
         if action == 'BUY':
             # Convert fraction to float and calculate dollar amount to invest
             fraction = float(fraction)
+            if use_open_price_for_buy:
+                price, _ = price_loader.get_next_available_price(symbol, date, 'open')
             dollar_amount = current_value * fraction
             if dollar_amount > fund:
                 raise Exception(
@@ -177,8 +133,14 @@ def backtest_trading(trading_ops, initial_fund, end_day, plot=False, return_hist
         updated_value = fund
         for sym, sh in portfolio.items():
             if sh > 0:
-                current_price = get_price_with_delisted(
-                    price_loader, sym, date, 'Close', portfolio)
+                try:
+                    current_price, date_used = price_loader.get_next_available_price(sym, date, 'close')
+                except Exception as e:
+                    raise Exception(
+                        f"Error getting price for {sym} on {date}: {str(e)}")
+                if date.strftime('%Y-%m-%d') != date_used:
+                    logging.warning(
+                        f"After execution portfolio value calculation used next day price for {sym}, used {date_used} instead of {date}")
                 updated_value += sh * current_price
 
         portfolio_values.append(updated_value)  # Store the post-trade value
@@ -189,8 +151,14 @@ def backtest_trading(trading_ops, initial_fund, end_day, plot=False, return_hist
     final_value = fund
     for symbol, shares in portfolio.items():
         if shares > 0:
-            last_price = get_price_with_delisted(
-                price_loader, symbol, end_day, 'Close', portfolio)
+            try:
+                last_price, date_used = price_loader.get_next_available_price(symbol, end_day, 'close')
+            except Exception as e:
+                raise Exception(
+                    f"Error getting price for {symbol} on {end_day}: {str(e)}")
+            if end_day.strftime('%Y-%m-%d') != date_used:
+                logging.warning(
+                    f"Final portfolio value calculation used next day price for {symbol}, used {date_used} instead of {end_day}")
             final_value += shares * last_price
 
     # Call the plotting function
