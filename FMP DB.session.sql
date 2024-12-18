@@ -1,5 +1,5 @@
 CREATE VIEW stock22to24 AS
-SELECT A.symbol, min_price * num_share / 1000000 as market_cap
+SELECT A.symbol, C.sector, C.industry, min_price * num_share / 1000000 as market_cap
 FROM (
     SELECT symbol, min(adjusted_close) as min_price
     FROM daily_price
@@ -13,8 +13,13 @@ JOIN (
     WHERE date BETWEEN '2021-01-05' AND '2024-11-05'
     GROUP BY symbol
 ) AS B
-ON A.symbol = B.symbol
-WHERE min_price * num_share / 1000000 >= 500
+JOIN (
+    SELECT symbol, sector, industry
+    FROM stock_symbol
+    WHERE sector is not NULL and industry is not NULL and type = 'stock'
+) AS C
+ON A.symbol = B.symbol AND B.symbol = C.symbol
+WHERE min_price * num_share / 1000000 >= 100
 ;
 
 
