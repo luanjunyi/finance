@@ -14,7 +14,7 @@ AFTER_PRICE = 'after_price'
 PRICE_METRICS = {BEFORE_PRICE, AFTER_PRICE}
 
 class Dataset:
-    def __init__(self, symbol: Union[str, List[str]], metrics: Dict[str, str], db_path: str = '/Users/jluan/code/finance/data/fmp_data.db'):
+    def __init__(self, symbol: Union[str, List[str]], metrics: Dict[str, str], for_date: str | None = None, db_path: str = '/Users/jluan/code/finance/data/fmp_data.db'):
         """Initialize Dataset object.
         
         Args:
@@ -33,6 +33,7 @@ class Dataset:
         self.symbol = [symbol] if isinstance(symbol, str) else symbol
         self.metrics = metrics
         self.db_path = db_path
+        self.for_date = for_date
         self.data = self.build()
 
     def __getattr__(self, name):
@@ -166,7 +167,17 @@ class Dataset:
         if rename_dict:
             result = result.rename(columns=rename_dict)
 
-        return result.sort_values(['symbol', 'date'])
+        result = result.sort_values(['symbol', 'date'])
+
+        # Filter data based on for_date if provided
+        if self.for_date:
+            # First filter to keep only data on or before for_date
+            result = result[result['date'] <= self.for_date]
+            if not result.empty:
+                # For each symbol, keep only the row with the most recent date
+                result = result.loc[result.groupby('symbol')['date'].idxmax()]
+
+        return result
 
     def get_data(self) -> pd.DataFrame:
         """Return the dataset."""
