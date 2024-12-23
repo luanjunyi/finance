@@ -14,7 +14,7 @@ stock_data_folder = 'stock_data'
 initial_fund = 1000000
 
 # Set up logging with filename and line numbers
-setup_logging(logging.CRITICAL)
+setup_logging(logging.DEBUG)
 
 class Backtest:
     def __init__(self, initial_fund=1000000):
@@ -41,6 +41,7 @@ class Backtest:
 
     def get_portfolio_value(self, date):   
         value = self.cash
+        logging.debug(f'Calculating portfolio value for {date}, cash: {self.cash}')
         for sym, sh in self.portfolio.items():
             if sh > 0:
                 try:
@@ -51,6 +52,7 @@ class Backtest:
                 if date.strftime('%Y-%m-%d') != date_used:
                     logging.warning(
                         f"After execution portfolio value calculation used previous day price for {sym}, used {date_used} instead of {date}")
+                logging.debug(f'Current price for {sym} is {current_price}, value: {sh * current_price}')
                 value += sh * current_price
         return value        
 
@@ -61,10 +63,14 @@ class Backtest:
         Args:
             trading_ops: List of operations, where each operation is a list containing
                         [symbol, date_str, action, fraction]
-            end_day: End date for the simulation
+            end_day: End date for the simulation, can be str
             plot: Whether to plot the results
             return_history: Whether to return history data
         """
+
+        if type(trading_ops) == pd.DataFrame:
+            trading_ops = trading_ops.values.tolist()
+
         self.portfolio = {}
         self.cash = self.initial_fund
         self.price_loader = FMPPriceLoader()
@@ -75,6 +81,11 @@ class Backtest:
         previous_fund_value = self.initial_fund
         current_cumulative_return = 1.0
 
+        if type(end_day) == str:
+            end_day = datetime.strptime(end_day, '%Y-%m-%d').date()
+
+        last_transaction_date = ''
+
         # Process trading operations
         for op in tqdm(trading_ops, desc="Processing trades"):
             assert len(
@@ -82,15 +93,20 @@ class Backtest:
 
             symbol, date_str, action, fraction = op
             date = datetime.strptime(date_str, '%Y-%m-%d').date()
-
-            # Calculate and store the portfolio value before the trade
             updated_value = self.get_portfolio_value(date)
-            period_return = updated_value / previous_fund_value
-            self.returns.append(period_return)
-            current_cumulative_return *= period_return
-            self.portfolio_values.append(current_cumulative_return * self.initial_fund)
-            self.dates.append(date)
 
+            # if date_str == '2024-05-15':
+            #     import pdb; pdb.set_trace()
+
+            if last_transaction_date != date_str:
+                last_transaction_date = date_str
+                # Calculate and store the portfolio value before the trade
+                period_return = updated_value / previous_fund_value if previous_fund_value != 0 else 1
+                self.returns.append(period_return)
+                current_cumulative_return *= period_return
+                self.portfolio_values.append(current_cumulative_return)
+                self.dates.append(date)
+            
             previous_fund_value = updated_value
 
             assert date <= end_day
@@ -110,7 +126,7 @@ class Backtest:
                 fraction = float(fraction)
                 if use_open_price_for_buy:
                     price, _ = self.price_loader.get_next_available_price(symbol, date, 'open')
-                dollar_amount = previous_fund_value * fraction
+                dollar_amount = max(previous_fund_value * fraction, 10000)
                 if dollar_amount > self.cash:
                     logging.info(
                         f"Added ${dollar_amount-self.cash} funds to invest {fraction:.1%} of portfolio (${dollar_amount:.2f})")
@@ -143,6 +159,9 @@ class Backtest:
 
                 self.cash += price * shares_to_sell
                 self.portfolio[symbol] -= shares_to_sell
+            previous_fund_value = self.get_portfolio_value(date)    
+
+            # Calculate and store the portfolio value after the trade
 
         # Evaluate final portfolio value
         logging.info(f"Calculating final portfolio value")
@@ -150,7 +169,7 @@ class Backtest:
         final_return = final_value / previous_fund_value
         self.returns.append(final_return)
         current_cumulative_return *= final_return
-        self.portfolio_values.append(current_cumulative_return * self.initial_fund)
+        self.portfolio_values.append(current_cumulative_return)
         self.dates.append(end_day)
 
         # Call the plotting function

@@ -27,20 +27,21 @@ class PriceCrawler(BaseFMPCrawler):
             )
 
             try:
-                cursor.execute('''
-                    INSERT OR REPLACE INTO daily_price 
-                    (symbol, date, open, high, low, close, adjusted_close, volume)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    symbol,
-                    price.get('date'),
-                    price.get('open'),
-                    price.get('high'),
-                    price.get('low'),
-                    price.get('close'),
-                    price.get('adjClose'),
-                    price.get('volume')
-                ))
+                if int(price.get('volume')) > 0 and float(price.get('adjClose') > 0.0):
+                    cursor.execute('''
+                        INSERT OR REPLACE INTO daily_price 
+                        (symbol, date, open, high, low, close, adjusted_close, volume)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        symbol,
+                        price.get('date'),
+                        price.get('open'),
+                        price.get('high'),
+                        price.get('low'),
+                        price.get('close'),
+                        price.get('adjClose'),
+                        price.get('volume')
+                    ))
             except Exception as e:
                 logging.error(
                     f"Error inserting price for {symbol} on {price.get('date')}: {str(e)}")

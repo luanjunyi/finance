@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime
-from trade_sim import Backtest
+from research.trade_sim import Backtest
 import logging
 import argparse
 
@@ -35,7 +35,7 @@ def compare_with_many(random_tradings, initial_fund=1000000,
         benchmark_ops = ops_df.values.tolist()
         benchmark_values, benchmark_dates = bt.run(
             benchmark_ops, end_day, return_history=True)
-        benchmark_return = (benchmark_values[-1] - initial_fund) / initial_fund * 100
+        benchmark_return = (benchmark_values[-1] - 1) * 100
 
         # Plot benchmark with actual values
         plt.plot(benchmark_dates, benchmark_values, color=colors[i % len(colors)],
@@ -49,7 +49,7 @@ def compare_with_many(random_tradings, initial_fund=1000000,
         # Run simulation with history
         comparison_values, dates = bt.run(
             comparison_ops, end_day, return_history=True)
-        comparison_return = (comparison_values[-1] - initial_fund) / initial_fund * 100
+        comparison_return = (comparison_values[-1] - 1) * 100
         comparison_returns.append(comparison_return)
 
         # Plot with actual values

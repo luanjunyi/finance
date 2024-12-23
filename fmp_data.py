@@ -1,6 +1,6 @@
 import pandas as pd
 import os
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import logging
 from typing import List, Dict, Union
 import sqlite3
@@ -197,7 +197,8 @@ class FMPPriceLoader:
         if not os.path.exists(db_path):
             raise FileNotFoundError(f"FMP Database file not found: {db_path}")
 
-        self.conn = sqlite3.connect(db_path)
+        # Connect in read-only mode using URI
+        self.conn = sqlite3.connect(f'file:{db_path}?mode=ro', uri=True)
         self.conn.row_factory = sqlite3.Row
         self.cursor = self.conn.cursor()
 
@@ -239,7 +240,7 @@ class FMPPriceLoader:
         self.cursor.execute(f"""
             SELECT {price_column} * (CAST(adjusted_close AS FLOAT) / close) as adj_price
             FROM daily_price
-            WHERE symbol = ? AND date = ? AND close > 0
+            WHERE symbol = ? AND date = ? AND close > 0 AND volume > 0
         """, (symbol, date_str))
 
         result = self.cursor.fetchone()
@@ -275,7 +276,7 @@ class FMPPriceLoader:
         self.cursor.execute(f"""
             SELECT {price_column} * (CAST(adjusted_close AS FLOAT) / close) as adj_price, date
             FROM daily_price
-            WHERE symbol = ? AND date <= ? AND close > 0
+            WHERE symbol = ? AND date <= ? AND close > 0 AND volume > 0
             ORDER BY date DESC
             LIMIT 1
         """, (symbol, start_date))
@@ -316,7 +317,7 @@ class FMPPriceLoader:
         self.cursor.execute(f"""
             SELECT {price_column} * (CAST(adjusted_close AS FLOAT) / close) as adj_price, date
             FROM daily_price
-            WHERE symbol = ? AND date >= ? AND close > 0
+            WHERE symbol = ? AND date >= ? AND close > 0 AND volume > 0
             ORDER BY date ASC
             LIMIT 1
         """, (symbol, start_date))
@@ -325,7 +326,52 @@ class FMPPriceLoader:
         return float(result['adj_price']), result['date']    
 
 
-    def get_last_available_price_for_stocks_on_dates(self, symbols: List[str], start_dates: List[str], price_type='close'):
+    def get_price_for_stocks_during(self, symbols: List[str], begin_date: str, end_date: str, price_type='close'):
+        """Get all prices for given stocks during the date range.
+
+        Args:
+            symbols (list): List of stock symbols
+            begin_date (str): Start date in YYYY-MM-DD format (inclusive)
+            end_date (str): End date in YYYY-MM-DD format (inclusive)
+            price_type (str): Type of price ('open', 'high', 'low', 'close')
+
+        Returns:
+            dict: Dictionary mapping symbol to list of (date, price) tuples, sorted by date DESC
+        """
+        if price_type not in ['open', 'high', 'low', 'close', 'adjusted_close']:
+            raise ValueError(
+                "price_type must be one of 'open', 'high', 'low', 'close', 'adjusted_close'")
+
+        # Simple query to get all prices in the date range
+        placeholders = ','.join('?' * len(symbols))
+        query = f"""
+            SELECT 
+                symbol,
+                date,
+                {price_type} * (CAST(adjusted_close AS FLOAT) / close) as adj_price
+            FROM daily_price
+            WHERE symbol IN ({placeholders})
+            AND date >= ?
+            AND date <= ?
+            AND close > 0
+            AND volume > 0
+            ORDER BY symbol, date DESC
+        """
+        
+        # Execute query
+        self.cursor.execute(query, (*symbols, begin_date, end_date))
+        
+        # Group prices by symbol
+        prices_by_symbol = {}
+        for row in self.cursor.fetchall():
+            symbol = row['symbol']
+            if symbol not in prices_by_symbol:
+                prices_by_symbol[symbol] = []
+            prices_by_symbol[symbol].append((row['date'], float(row['adj_price'])))
+        
+        return prices_by_symbol
+
+    def get_last_available_price_for_stocks_on_dates(self, symbols: List[str], dates: List[str], price_type='close'):
         """Get the last available **adjusted** price before or on the start date.
 
         Args:
@@ -336,58 +382,40 @@ class FMPPriceLoader:
         Returns:
             dict: Dictionary mapping (symbol, start_date) pairs to (price, actual_date) tuples
         """
-        if price_type not in ['open', 'high', 'low', 'close', 'adjusted_close']:
-            raise ValueError(
-                "price_type must be one of 'Open', 'High', 'Low', 'Close', 'adjusted_close'")
+        if not dates or not symbols:
+            return {}
 
-        # Create temporary table
-        self.cursor.execute("DROP TABLE IF EXISTS temp_symbol_dates")
-        self.cursor.execute("""
-            CREATE TEMPORARY TABLE temp_symbol_dates (
-                symbol TEXT,
-                request_date TEXT
-            )
-        """)
-        
-        # Create cartesian product in Python and insert all pairs
-        symbol_date_pairs = [(sym, date) for sym in symbols for date in start_dates]
-        self.cursor.executemany(
-            "INSERT INTO temp_symbol_dates VALUES (?, ?)",
-            symbol_date_pairs
-        )
+        # Find min and max dates to create an efficient date range
+        min_date = min(dates)
+        max_date = max(dates)
+        min_search_date = self.cursor.execute(
+            "SELECT date(?, '-5 days')", (min_date,)
+        ).fetchone()[0]
 
-        # Main query to get all prices in one go
-        self.cursor.execute(f"""
-            WITH LatestDates AS (
-                SELECT 
-                    sd.symbol,
-                    sd.request_date,
-                    MAX(dp.date) as actual_date
-                FROM temp_symbol_dates sd
-                JOIN daily_price dp ON dp.symbol = sd.symbol 
-                    AND dp.date <= sd.request_date
-                    AND dp.date >= date(sd.request_date, '-5 days')
-                    AND dp.close > 0
-                GROUP BY sd.symbol, sd.request_date
-            )
-            SELECT 
-                ld.symbol,
-                ld.request_date,
-                dp.{price_type} * (CAST(dp.adjusted_close AS FLOAT) / dp.close) as adj_price,
-                ld.actual_date
-            FROM LatestDates ld
-            JOIN daily_price dp ON dp.symbol = ld.symbol 
-                AND dp.date = ld.actual_date
-        """)
+        # Get all prices in the date range
+        prices_by_symbol = self.get_price_for_stocks_during(
+            symbols, min_search_date, max_date, price_type)
         
-        # Convert results to the expected dictionary format
+        # Sort dates in descending order to match with prices
+        sorted_dates = sorted(dates, reverse=True)
         results = {}
-        for row in self.cursor.fetchall():
-            key = (row['symbol'], row['request_date'])
-            results[key] = (float(row['adj_price']), row['actual_date'])
+        
+        # For each symbol, merge sort with dates to find matches
+        for symbol, prices in prices_by_symbol.items():
+            date_idx = 0
+            price_idx = 0
             
-        # Drop temporary table
-        self.cursor.execute("DROP TABLE IF EXISTS temp_symbol_dates")
+            while date_idx < len(sorted_dates) and price_idx < len(prices):
+                request_date = sorted_dates[date_idx]
+                price_date, price = prices[price_idx]
+                
+                if price_date <= request_date:
+                    # Found a match - this is the most recent price for this date
+                    results[(symbol, request_date)] = (price, price_date)
+                    date_idx += 1
+                else:
+                    # Price is too recent, try next price
+                    price_idx += 1
         
         return results
 
@@ -415,7 +443,7 @@ class FMPPriceLoader:
         self.cursor.execute("""
             SELECT date, adjusted_close
             FROM daily_price
-            WHERE symbol = ? AND date BETWEEN ? AND ? AND close > 0
+            WHERE symbol = ? AND date BETWEEN ? AND ? AND close > 0 AND volume > 0
             ORDER BY date ASC
         """, (symbol, start_date, end_date))
 
@@ -442,7 +470,7 @@ class FMPPriceLoader:
         self.cursor.execute("""
             SELECT date, adjusted_close
             FROM daily_price
-            WHERE symbol = ? AND date <= ? AND close > 0
+            WHERE symbol = ? AND date <= ? AND close > 0 AND volume > 0
             ORDER BY date DESC
             LIMIT ?
         """, (symbol, last_date, num_days))
@@ -455,16 +483,37 @@ class FMPPriceLoader:
         cursor.execute(f"""
             SELECT COUNT(DISTINCT symbol) as num_stocks
             FROM daily_price
-            WHERE date = ? AND close > 0
+            WHERE date = ? AND close > 0 AND volume > 0
         """, (date,))
 
         return cursor.fetchone()['num_stocks']
 
     def get_us_stock_symbols(self):
-        cursor = self.conn.cursor()
-        cursor.execute("""
+        self.cursor.execute("""
             SELECT symbol FROM stock_symbol 
             WHERE exchange_short_name IN ('NYSE', 'NASDAQ', 'AMEX')
             AND type = 'stock'
         """)
-        return [row['symbol'] for row in cursor.fetchall()]
+        return [row['symbol'] for row in self.cursor.fetchall()]
+
+    def active_us_stocks_on(self, date_str) -> set[str]:
+
+        five_days_ago = (datetime.strptime(date_str, '%Y-%m-%d') - timedelta(days=5)).strftime('%Y-%m-%d')
+        
+        self.cursor.execute('''
+            SELECT DISTINCT A.symbol
+            FROM stock_symbol A
+            JOIN daily_price B ON A.symbol = B.symbol
+            WHERE A.exchange_short_name IN ('NYSE', 'NASDAQ', 'AMEX')
+                AND A.type = 'stock'
+                AND B.adjusted_close < 10000
+                AND B.volume > 0
+                AND B.date BETWEEN ? AND ?
+        ''', (five_days_ago, date_str))
+        
+        return set(row['symbol'] for row in self.cursor.fetchall())        
+
+def fmp(sql):
+    db = sqlite3.connect('/Users/jluan/code/finance/data/fmp_data.db')
+    df = pd.read_sql_query(sql, db)
+    return df        
