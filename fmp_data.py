@@ -4,10 +4,7 @@ from datetime import datetime, date, timedelta
 import logging
 from typing import List, Dict, Union
 import sqlite3
-from utils.logging_config import setup_logging
 
-# Set up logging with filename and line numbers
-setup_logging()
 
 BEFORE_PRICE = 'before_price'
 AFTER_PRICE = 'after_price'
