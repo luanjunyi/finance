@@ -13,11 +13,8 @@ import numpy as np
 stock_data_folder = 'stock_data'
 initial_fund = 1000000
 
-# Set up logging with filename and line numbers
-setup_logging(logging.DEBUG)
-
 class Backtest:
-    def __init__(self, initial_fund=1000000):
+    def __init__(self, initial_fund=0):
         self.initial_fund = initial_fund
         self.price_loader = FMPPriceLoader()
         

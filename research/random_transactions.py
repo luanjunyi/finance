@@ -6,6 +6,8 @@ import random
 import logging
 from datetime import datetime, timedelta
 
+from pandas.core import algorithms
+
 from fmp_data import FMPPriceLoader, Dataset, AFTER_PRICE, fmp
 from feature_gen.sma import SMA
 
@@ -156,39 +158,8 @@ class RandomTransactionGenerator:
         active_stocks = list(self.active_stocks_on(date))
         return random.sample(active_stocks, 5), [random.choice(list(portfolio)),] if len(portfolio) > 0 else []
 
-    def generate_pure_random(self, num=1):
-        ret = []
-        #self.prefetch()
-        ops = self.original_transactions()        
 
-        for iter in range(num):
-            portfolio = set()
-            new_ops = []                                        
-            for _, row in ops.iterrows():
-                date = str(row['date'])
-                action = row['action']
-                amount = str(row['amount'])
-
-                if action == 'BUY':
-                    selected, sell_triggered = self.pure_random(date, portfolio)
-                    random.shuffle(selected)
-                    for sym in selected[:3]:
-                        portfolio.add(sym)
-                        new_ops.append([sym, date, 'BUY', amount])
-                    for sym in sell_triggered:
-                        new_ops.append([sym, date, 'SELL', 'ALL'])
-                        portfolio.remove(sym)
-                        logging.debug(f"SELL {sym} at {date}")
-
-                elif action == 'SELL':
-                    pass # Ignore sell transactions as sell are managed by ourself
-
-            output_df = pd.DataFrame(new_ops)
-            output_df.columns = ['symbol', 'date', 'action', 'amount']
-            ret.append(output_df)
-        return ret  
-
-    def generate_operations(self, num=1):
+    def generate_operations(self, method, num=1):
         """
         Generate random buy and sell transactions. The logic is simple: at each buy transaction date
         1. Randomly choose a stock to add to the portfolio, assign 1% of total portfolio value
@@ -196,9 +167,18 @@ class RandomTransactionGenerator:
         3. Evaluate the return in the last period before those operation. Those returns will be multifplied together
            to get the final return (time-weighted return as in https://en.wikipedia.org/wiki/Time-weighted_return ).
         Ignore the sell operations in the original file.
-        """       
+        """
+        algorithms = {
+            'random': self.pure_random,
+            'ap_simulate': self.check_momentum_at,
+        }
+        if method == 'ap_simulate':
+            self.prefetch()
+            
+        decision_at = algorithms[method]
+        logging.info(f"Generating trading transactions using {method} algorithm")
         ret = []
-        #self.prefetch()
+
         ops = self.original_transactions()        
 
         for iter in range(num):
@@ -210,7 +190,7 @@ class RandomTransactionGenerator:
                 amount = str(row['amount'])
 
                 if action == 'BUY':
-                    selected, sell_triggered = self.check_momentum_at(date, portfolio)
+                    selected, sell_triggered = decision_at(date, portfolio)
                     random.shuffle(selected)
                     for sym in selected[:3]:
                         portfolio.add(sym)
