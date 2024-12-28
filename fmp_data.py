@@ -92,12 +92,16 @@ class Dataset:
         for date in dates:
             row = {'date': date, 'symbol': symbol}
             for metric in requested_price_metrics:
-                if metric == BEFORE_PRICE:
-                    price, _ = price_loader.get_last_available_price(symbol, date)
+                try:
+                    if metric == BEFORE_PRICE:
+                        price, _ = price_loader.get_last_available_price(symbol, date)
+                    else:
+                        assert metric == AFTER_PRICE
+                        price, _ = price_loader.get_next_available_price(symbol, date)
+                except KeyError:
+                        logging.warning(f'Failed to fetch historical price for {symbol} on {date}')
                 else:
-                    assert metric == AFTER_PRICE
-                    price, _ = price_loader.get_next_available_price(symbol, date)
-                row[metric] = price
+                    row[metric] = price
             price_data.append(row)
 
         return pd.DataFrame(price_data)
@@ -244,7 +248,7 @@ class FMPPriceLoader:
 
         return float(result['adj_price'])
 
-    def get_last_available_price(self, symbol, start_date, price_type='close'):
+    def get_last_available_price(self, symbol, start_date, price_type='close', max_window_days=4):
         """Get the last available **adjusted** price before or on the start date.
 
         Args:
@@ -282,10 +286,15 @@ class FMPPriceLoader:
         if not result:
             raise KeyError(
                 f"Can't find historical price of {symbol} for {start_date} or earlier")
-        return float(result['adj_price']), result['date']     
+        date_used = result['date']
+        diff = (pd.to_datetime(date_used) - pd.to_datetime(start_date)).days
+        if abs(diff) > max_window_days:
+            raise KeyError(
+                f"Can't find historical price of {symbol} for {start_date} within {max_window_days} days, last available is {date_used}")
+        return float(result['adj_price']), date_used
 
 
-    def get_next_available_price(self, symbol, start_date, price_type='close'):
+    def get_next_available_price(self, symbol, start_date, price_type='close', max_window_days=4):
         """Get the next available price after or on the start date.
 
         Args:
@@ -320,7 +329,15 @@ class FMPPriceLoader:
         """, (symbol, start_date))
 
         result = self.cursor.fetchone()
-        return float(result['adj_price']), result['date']    
+        if not result:
+            raise KeyError(
+                f"Can't find historical price of {symbol} for {start_date} or earlier")
+        date_used = result['date']
+        diff = (pd.to_datetime(date_used) - pd.to_datetime(start_date)).days
+        if abs(diff) > max_window_days:
+            raise KeyError(
+                f"Can't find historical price of {symbol} for {start_date} within {max_window_days} days, next available is {date_used}")
+        return float(result['adj_price']), date_used 
 
 
     def get_price_for_stocks_during(self, symbols: List[str], begin_date: str, end_date: str, price_type='close'):

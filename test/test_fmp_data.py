@@ -212,6 +212,44 @@ def test_price_loader_multiple_stocks(test_db, sample_symbols, sample_dates):
     assert prices['GOOGL'][0][1] == 152.0
 
 
+def test_price_loader_last_available_price_max_window(test_db):
+    """Test FMPPriceLoader.get_last_available_price with max_window_days parameter."""
+    loader = FMPPriceLoader(test_db)
+    
+    # Test with default max_window_days (4)
+    price, date = loader.get_last_available_price('AAPL', '2024-01-05')
+    assert price == 105.0
+    assert date == '2024-01-02'
+    
+    # Test with custom max_window_days that allows the price
+    price, date = loader.get_last_available_price('AAPL', '2024-01-05', max_window_days=5)
+    assert price == 105.0
+    assert date == '2024-01-02'
+    
+    # Test with custom max_window_days that's too restrictive
+    with pytest.raises(KeyError, match=r".*within 2 days.*"):
+        loader.get_last_available_price('AAPL', '2024-01-05', max_window_days=2)
+
+
+def test_price_loader_next_available_price_max_window(test_db):
+    """Test FMPPriceLoader.get_next_available_price with max_window_days parameter."""
+    loader = FMPPriceLoader(test_db)
+    
+    # Test with default max_window_days (4)
+    price, date = loader.get_next_available_price('AAPL', '2023-12-31')
+    assert price == 102.0
+    assert date == '2024-01-01'
+    
+    # Test with custom max_window_days that allows the price
+    price, date = loader.get_next_available_price('AAPL', '2023-12-31', max_window_days=5)
+    assert price == 102.0
+    assert date == '2024-01-01'
+    
+    # Test with custom max_window_days that's too restrictive
+    with pytest.raises(KeyError, match=r".*within 2 days.*"):
+        loader.get_next_available_price('AAPL', '2023-12-28', max_window_days=2)
+
+
 def test_error_handling(test_db):
     """Test error handling for invalid inputs."""
     loader = FMPPriceLoader(db_path=test_db)
@@ -227,4 +265,3 @@ def test_error_handling(test_db):
     # Test invalid price type
     with pytest.raises(ValueError):
         loader.get_price('AAPL', '2024-01-01', 'invalid_type')
-
