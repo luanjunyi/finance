@@ -1,3 +1,16 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
 CREATE VIEW stock22to24 AS
 SELECT A.symbol, C.sector, C.industry, min_price * num_share / 1000000 as market_cap
 FROM (
