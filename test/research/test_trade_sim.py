@@ -110,7 +110,7 @@ def test_portfolio_returns(backtest, mock_price_loader):
     end_day = datetime.strptime('2024-01-04', '%Y-%m-%d').date()
     
     # Mock prices for all the necessary calls
-    mock_price_loader.get_last_available_price.side_effect = lambda sym, date, price_type: (
+    mock_price_loader.get_last_available_price.side_effect = lambda sym, date, price_type, max_window_days=None: (
         (100.0, '2024-01-01') if date.strftime('%Y-%m-%d') <= '2024-01-01' else (110.0, '2024-01-04')
     )
     
@@ -131,12 +131,15 @@ def test_portfolio_returns_multiple_buys(backtest, mock_price_loader):
     end_day = datetime.strptime('2024-01-04', '%Y-%m-%d').date()
     
     # Mock prices: AAPL starts at 100, ends at 110; GOOGL starts at 150, ends at 180
-    mock_price_loader.get_last_available_price.side_effect = lambda sym, date, price_type: (
-        (100.0, '2024-01-01') if date.strftime('%Y-%m-%d') <= '2024-01-01' and sym == 'AAPL'
-        else (110.0, '2024-01-04') if sym == 'AAPL'
-        else (150.0, '2024-01-01') if date.strftime('%Y-%m-%d') <= '2024-01-01'
-        else (180.0, '2024-01-04')
-    )
+    def mock_price(sym, date, price_type, max_window_days=None):
+        date_str = date.strftime('%Y-%m-%d')
+        if sym == 'AAPL':
+            return (100.0, '2024-01-01') if date_str <= '2024-01-01' else (110.0, '2024-01-04')
+        else:  # GOOGL
+            return (150.0, '2024-01-01') if date_str <= '2024-01-01' else (180.0, '2024-01-04')
+    
+    mock_price_loader.get_last_available_price.side_effect = mock_price
+    mock_price_loader.get_next_available_price.side_effect = mock_price
     
     # Buy operations: 30% AAPL, 40% GOOGL
     operations = [
@@ -167,7 +170,7 @@ def test_portfolio_returns_buy_sell_buy(backtest, mock_price_loader):
         '2024-01-04': {'AAPL': 110.0}
     }
     
-    mock_price_loader.get_last_available_price.side_effect = lambda sym, date, price_type: (
+    mock_price_loader.get_last_available_price.side_effect = lambda sym, date, price_type, max_window_days=None: (
         (prices[date.strftime('%Y-%m-%d')][sym], date.strftime('%Y-%m-%d'))
     )
     
@@ -201,7 +204,7 @@ def test_portfolio_returns_gradual_sells(backtest, mock_price_loader):
         '2024-01-04': {'AAPL': 130.0}
     }
     
-    mock_price_loader.get_last_available_price.side_effect = lambda sym, date, price_type: (
+    mock_price_loader.get_last_available_price.side_effect = lambda sym, date, price_type, max_window_days=None: (
         (prices[date.strftime('%Y-%m-%d')][sym], date.strftime('%Y-%m-%d'))
     )
     
@@ -238,7 +241,7 @@ def test_portfolio_returns_price_gaps(backtest, mock_price_loader):
         '2024-01-04': {'AAPL': 120.0}
     }
     
-    def mock_price(sym, date, price_type):
+    def mock_price(sym, date, price_type, max_window_days=None):
         date_str = date.strftime('%Y-%m-%d')
         if date_str in prices and sym in prices[date_str]:
             return prices[date_str][sym], date_str
@@ -292,7 +295,7 @@ def test_portfolio_returns_tiny_trades(backtest, mock_price_loader):
     end_day = datetime.strptime('2024-01-04', '%Y-%m-%d').date()
     
     # Mock prices with small changes
-    mock_price_loader.get_last_available_price.side_effect = lambda sym, date, price_type: (
+    mock_price_loader.get_last_available_price.side_effect = lambda sym, date, price_type, max_window_days=None: (
         (100.001, '2024-01-01') if date.strftime('%Y-%m-%d') == '2024-01-01'
         else (100.002, '2024-01-02') if date.strftime('%Y-%m-%d') == '2024-01-02'
         else (100.003, '2024-01-04')
@@ -321,9 +324,23 @@ def test_portfolio_returns_extreme_moves(backtest, mock_price_loader):
         '2024-01-04': {'AAPL': 0.1, 'GOOGL': 3000.0}     # AAPL down 90% more, GOOGL doubles
     }
     
-    mock_price_loader.get_last_available_price.side_effect = lambda sym, date, price_type: (
-        (prices[date.strftime('%Y-%m-%d')][sym], date.strftime('%Y-%m-%d'))
-    )
+    def mock_price(sym, date, price_type, max_window_days=None):
+        date_str = date.strftime('%Y-%m-%d')
+        if date_str not in prices:
+            # Find the nearest date
+            dates = list(prices.keys())
+            dates.sort()
+            if date_str < dates[0]:
+                date_str = dates[0]
+            else:
+                for d in reversed(dates):
+                    if date_str >= d:
+                        date_str = d
+                        break
+        return (prices[date_str][sym], date_str)
+    
+    mock_price_loader.get_last_available_price.side_effect = mock_price
+    mock_price_loader.get_next_available_price.side_effect = mock_price
     
     operations = [
         ['AAPL', '2024-01-01', 'BUY', '0.5'],     # Buy AAPL at 100
@@ -378,7 +395,7 @@ def test_portfolio_returns_rebalancing(backtest, mock_price_loader):
         '2024-01-04': {'AAPL': 80.0, 'GOOGL': 130.0, 'MSFT': 110.0}
     }
     
-    mock_price_loader.get_last_available_price.side_effect = lambda sym, date, price_type: (
+    mock_price_loader.get_last_available_price.side_effect = lambda sym, date, price_type, max_window_days=None: (
         (prices[date.strftime('%Y-%m-%d')][sym], date.strftime('%Y-%m-%d'))
     )
     

@@ -1,7 +1,8 @@
+DROP VIEW IF EXISTS valid_us_stocks;
 CREATE VIEW IF NOT EXISTS valid_us_stocks AS
 WITH us_stocks AS (
     -- Filter for US stocks
-    SELECT DISTINCT symbol 
+    SELECT symbol, sector, industry
     FROM stock_symbol 
     WHERE exchange_short_name IN ('NYSE', 'NASDAQ', 'AMEX')
     AND type = 'stock'
@@ -36,6 +37,8 @@ expected_days AS (
     GROUP BY s.symbol, s.min_date, s.max_date, s.actual_days
 )
 -- Final selection of stocks with complete data
-SELECT symbol
+SELECT S.symbol, S.sector, S.industry
 FROM expected_days
+JOIN us_stocks S
+    ON S.symbol = expected_days.symbol
 WHERE actual_days = expected_days;

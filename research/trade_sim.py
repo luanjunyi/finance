@@ -14,9 +14,19 @@ stock_data_folder = 'stock_data'
 initial_fund = 1000000
 
 class Backtest:
-    def __init__(self, initial_fund=0):
+    def __init__(self, initial_fund=0, tolerance_days=4):
+        self.tolerance_days = tolerance_days
         self.initial_fund = initial_fund
-        self.price_loader = FMPPriceLoader()
+        self._reset()
+
+    def _reset(self):
+        self.cash = self.initial_fund
+        self.price_loader = FMPPriceLoader(price_tolerance_days=self.tolerance_days)
+        self.portfolio = {}
+        self.returns = []
+        self.dates = []
+        self.portfolio_values = []
+
         
     def plot_portfolio_value(self):
         plt.figure(figsize=(10, 6))
@@ -42,7 +52,7 @@ class Backtest:
         for sym, sh in self.portfolio.items():
             if sh > 0:
                 try:
-                    current_price, date_used = self.price_loader.get_last_available_price(sym, date, 'close')
+                    current_price, date_used = self.price_loader.get_last_available_price(sym, date, 'close', max_window_days=13)
                 except Exception as e:
                     raise Exception(
                         f"Error getting price for {sym} on {date}: {str(e)}")
@@ -64,16 +74,11 @@ class Backtest:
             plot: Whether to plot the results
             return_history: Whether to return history data
         """
-
+        self._reset()
         if type(trading_ops) == pd.DataFrame:
             trading_ops = trading_ops.values.tolist()
 
-        self.portfolio = {}
-        self.cash = self.initial_fund
-        self.price_loader = FMPPriceLoader()
-        self.returns = []
-        self.dates = []
-        self.portfolio_values = []
+
 
         previous_fund_value = self.initial_fund
         current_cumulative_return = 1.0
@@ -109,11 +114,9 @@ class Backtest:
             assert date <= end_day
 
             price_type = 'close'
-            try:
-                price, date_used = self.price_loader.get_last_available_price(symbol, date, price_type)
-            except Exception as e:
-                raise Exception(
-                    f"Error getting price for {symbol} on {date}: {str(e)}")
+
+            price, date_used = self.price_loader.get_next_available_price(symbol, date, price_type)
+
             if date.strftime('%Y-%m-%d') != date_used:
                 logging.warning(
                     f"Buying used next day price for {symbol}, used {date_used} instead of {date}")
@@ -140,7 +143,7 @@ class Backtest:
             else:  # SELL
                 assert action == 'SELL', "Action must be 'SELL' or 'BUY'"
                 if symbol not in self.portfolio or self.portfolio[symbol] <= 0:
-                    raise Exception(f"No shares of {symbol} to sell")
+                    raise Exception(f"No shares of {symbol} to sell on {date_str}")
 
                 current_shares = self.portfolio[symbol]
                 if fraction == 'ALL':

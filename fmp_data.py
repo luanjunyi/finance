@@ -86,7 +86,7 @@ class Dataset:
         """
         requested_price_metrics = set(self.metrics.keys()) & PRICE_METRICS
 
-        price_loader = FMPPriceLoader(self.db_path)
+        price_loader = FMPPriceLoader(db_path=self.db_path)
         price_data = []
 
         for date in dates:
@@ -186,15 +186,19 @@ class Dataset:
 
 
 class FMPPriceLoader:
-    def __init__(self, db_path: str = '/Users/jluan/code/finance/data/fmp_data.db'):
+    def __init__(self, price_tolerance_days: int = 4, db_path: str = '/Users/jluan/code/finance/data/fmp_data.db'):
         """Initialize database connection
 
         Args:
+            price_tolerance_days (int): Maximum number of days to search for a price when given date has no data. Used
+                in get_last_available_price and get_next_available_price
             db_path (str): Path to the SQLite database file. Defaults to '/Users/jluan/code/finance/data/fmp_data.db'
 
         Raises:
             FileNotFoundError: If the database file doesn't exist
         """
+
+        self.price_tolerance_days = price_tolerance_days 
         if not os.path.exists(db_path):
             raise FileNotFoundError(f"FMP Database file not found: {db_path}")
 
@@ -248,13 +252,14 @@ class FMPPriceLoader:
 
         return float(result['adj_price'])
 
-    def get_last_available_price(self, symbol, start_date, price_type='close', max_window_days=4):
+    def get_last_available_price(self, symbol, start_date, price_type='close', max_window_days=None):
         """Get the last available **adjusted** price before or on the start date.
 
         Args:
             symbol (str): Stock symbol
             start_date (str): Date to get price for in YYYY-MM-DD format
             price_type (str): Type of price ('open', 'high', 'low', 'close')
+            max_window_days (int): Maximum number of "look back" days when the given date is not found
 
         Returns:
             tuple: (price, date) where price is the adjusted price and date is
@@ -264,6 +269,9 @@ class FMPPriceLoader:
             ValueError: If price_type is invalid
             KeyError: If no price data found
         """
+        if max_window_days is None:
+            max_window_days = self.price_tolerance_days
+
         # Convert datetime or date object to string format if needed
         if isinstance(start_date, (datetime, date)):
             start_date = start_date.strftime('%Y-%m-%d')
@@ -294,13 +302,14 @@ class FMPPriceLoader:
         return float(result['adj_price']), date_used
 
 
-    def get_next_available_price(self, symbol, start_date, price_type='close', max_window_days=4):
+    def get_next_available_price(self, symbol, start_date, price_type='close', max_window_days=None):
         """Get the next available price after or on the start date.
 
         Args:
             symbol (str): Stock symbol
             start_date (str): Date to get price for in YYYY-MM-DD format
             price_type (str): Type of price ('open', 'high', 'low', 'close')
+            max_window_days (int): Maximum number of "look ahead" days when the given date is not found
 
         Returns:
             tuple: (price, date) where price is the adjusted price and date is
@@ -310,6 +319,9 @@ class FMPPriceLoader:
             ValueError: If price_type is invalid
             KeyError: If no price data found
         """
+        if max_window_days is None:
+            max_window_days = self.price_tolerance_days
+
         # Convert datetime or date object to string format if needed
         if isinstance(start_date, (datetime, date)):
             start_date = start_date.strftime('%Y-%m-%d')

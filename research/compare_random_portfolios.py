@@ -7,7 +7,7 @@ import logging
 import argparse
 
 
-def compare_with_many(random_tradings, initial_fund=1000000,
+def compare_with_many(random_tradings, initial_fund=0, tolerance_days=4,
                       benchmarks={}, end_day=datetime.now().date()):
     """Compare random portfolios against multiple benchmark portfolios.
     
@@ -20,8 +20,7 @@ def compare_with_many(random_tradings, initial_fund=1000000,
     Returns:
         numpy.ndarray: Array of returns for all comparison portfolios
     """
-
-    bt = Backtest(initial_fund=initial_fund)
+    bt = Backtest(initial_fund=initial_fund, tolerance_days=tolerance_days)
 
     if type(end_day) == str:
         end_day = datetime.strptime(end_day, '%Y-%m-%d').date()

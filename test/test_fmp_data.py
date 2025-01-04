@@ -181,9 +181,12 @@ def test_price_loader_next_available_price(test_db):
     assert price == 102.0
     assert date == '2024-01-01'
 
-    price, date = loader.get_next_available_price('AAPL', '2023-12-09')
+    price, date = loader.get_next_available_price('AAPL', '2023-12-09', max_window_days=30)
     assert price == 102.0
     assert date == '2024-01-01'    
+
+    with pytest.raises(KeyError):
+        loader.get_next_available_price('AAPL', '2023-12-09')
 
 
 def test_price_loader_price_range(test_db):
@@ -214,10 +217,10 @@ def test_price_loader_multiple_stocks(test_db, sample_symbols, sample_dates):
 
 def test_price_loader_last_available_price_max_window(test_db):
     """Test FMPPriceLoader.get_last_available_price with max_window_days parameter."""
-    loader = FMPPriceLoader(test_db)
-    
+    loader = FMPPriceLoader(db_path=test_db)
+
     # Test with default max_window_days (4)
-    price, date = loader.get_last_available_price('AAPL', '2024-01-05')
+    price, date = loader.get_last_available_price('AAPL', '2024-01-05', max_window_days=4)
     assert price == 105.0
     assert date == '2024-01-02'
     
@@ -233,10 +236,10 @@ def test_price_loader_last_available_price_max_window(test_db):
 
 def test_price_loader_next_available_price_max_window(test_db):
     """Test FMPPriceLoader.get_next_available_price with max_window_days parameter."""
-    loader = FMPPriceLoader(test_db)
-    
+    loader = FMPPriceLoader(db_path=test_db)
+
     # Test with default max_window_days (4)
-    price, date = loader.get_next_available_price('AAPL', '2023-12-31')
+    price, date = loader.get_next_available_price('AAPL', '2023-12-31', max_window_days=4)
     assert price == 102.0
     assert date == '2024-01-01'
     
