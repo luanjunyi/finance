@@ -9,7 +9,7 @@ import csv
 
 @pytest.fixture
 def backtest():
-    return Backtest(initial_fund=1000000)
+    return Backtest(initial_fund=1000000, begin_eval_date='2024-01-01', end_eval_date='2024-01-04', eval_interval=1)
 
 @pytest.fixture
 def mock_price_loader():
@@ -38,24 +38,81 @@ def test_portfolio_value_calculation(backtest, mock_price_loader):
     
     # Expected: cash + (AAPL shares * price) + (GOOGL shares * price)
     expected_value = 500000 + (1000 * 100.0) + (500 * 100.0)
-    assert value == expected_value
+    assert value == pytest.approx(expected_value)
 
-def test_buy_operation(backtest, mock_price_loader, sample_trading_ops):
+def test_buy_operation(backtest, mock_price_loader):
     backtest.price_loader = mock_price_loader
-    end_day = datetime.strptime('2024-01-04', '%Y-%m-%d').date()
+    backtest.begin_eval_date = datetime.strptime('2024-01-01', '%Y-%m-%d').date()
+    backtest.end_eval_date = datetime.strptime('2024-01-04', '%Y-%m-%d').date()
     
     # Run simulation with just the buy operation
-    backtest.run([sample_trading_ops[0]], end_day)
+    backtest.run([['AAPL', '2024-01-01', 'BUY', '0.5'],])
     
     # Check if shares were bought correctly
     assert 'AAPL' in backtest.portfolio
     expected_shares = int((1000000 * 0.5) / 100.0)  # 50% of initial fund at $100 per share
     assert backtest.portfolio['AAPL'] == expected_shares
+    assert len(backtest.portfolio) == 1
     assert backtest.cash == 1000000 - (expected_shares * 100.0)
+
+def test_buy_with_insufficient_fund(backtest, mock_price_loader):
+    backtest.price_loader = mock_price_loader
+    backtest.begin_eval_date = datetime.strptime('2024-01-01', '%Y-%m-%d').date()
+    backtest.end_eval_date = datetime.strptime('2024-01-04', '%Y-%m-%d').date()
+    backtest.initial_fund = 30
+
+    backtest.min_position_dollar = 1000
+
+    backtest.run([['AAPL', '2024-01-01', 'BUY', '0.5'],])
+    # 30 * 0.5 is less than one share ($100), therefore will buy $10000 worth of share
+    # which is 100 shares.
+    assert backtest.portfolio['AAPL'] == int(backtest.min_position_dollar / 100.0)
+    assert backtest.cash == 0
+
+def test_buy_with_insufficient_fund_trigger_period_return(backtest, mock_price_loader):
+    backtest.price_loader = mock_price_loader
+    backtest.begin_eval_date = datetime.strptime('2024-01-01', '%Y-%m-%d').date()
+    backtest.end_eval_date = datetime.strptime('2024-01-04', '%Y-%m-%d').date()
+    backtest.initial_fund = 1000000
+
+    # Mock price changes
+    prices = {
+        '2024-01-01': 100.0,
+        '2024-01-02': 110.0,
+        '2024-01-03': 120.0,
+        '2024-01-04': 130.0
+    }
+    mock_price_loader.get_last_available_price.side_effect = lambda sym, date, price_type, max_window_days=None: (
+        prices[date.strftime('%Y-%m-%d')], date.strftime('%Y-%m-%d')
+    )
+    mock_price_loader.get_next_available_price.side_effect = lambda sym, date, price_type, max_window_days=None: (
+        prices[date.strftime('%Y-%m-%d')], date.strftime('%Y-%m-%d')
+    )    
+
+    operations = [
+        ['AAPL', '2024-01-01', 'BUY', '1.0'],
+        ['AAPL', '2024-01-02', 'BUY', '0.2'],
+    ]
+
+    final_value = backtest.run(operations, return_history=False)
+
+    # 01-01: buy 10000 shares
+    # 01-02: total value: 1.1M, buy 20% worth of AAPL (1.1M * 0.2 = 220,000), this trigger period return of 10%
+    #        after adding 220K, it is used to buy 2000 more shares, there are 2000 + 10000 = 12000 shares. Total worth: 12K * 110
+    # 01-03: the share worth 12K * 120, period return 12/11
+    # 01-04: period return 13/12
+    expected_twr = (130 / 120) * (120 / 110) * (110/100)
+    assert final_value == pytest.approx(expected_twr)
+    assert backtest.get_portfolio_value(pd.to_datetime('2024-01-04')) == pytest.approx(1300000 + 220000 * 13/11, rel=1e-6)
+    period_returns = [1.0, 110/100, 120/100, 130/100]
+    for i in range(4):
+        assert pytest.approx(backtest.portfolio_values[i], rel=1e-6) == period_returns[i]
+
 
 def test_sell_operation(backtest, mock_price_loader):
     backtest.price_loader = mock_price_loader
-    end_day = datetime.strptime('2024-01-02', '%Y-%m-%d').date()
+    backtest.begin_eval_date = datetime.strptime('2024-01-01', '%Y-%m-%d').date()
+    backtest.end_eval_date = datetime.strptime('2024-01-02', '%Y-%m-%d').date()
     
     # Create buy and sell operations
     operations = [
@@ -64,7 +121,7 @@ def test_sell_operation(backtest, mock_price_loader):
     ]
     
     # Run both operations in sequence
-    backtest.run(operations, end_day)
+    backtest.run(operations)
     
     # Calculate expected shares
     # Initial buy: should buy shares worth ~1M at $100/share = 10000 shares
@@ -74,40 +131,28 @@ def test_sell_operation(backtest, mock_price_loader):
     # Verify the portfolio state after both operations
     assert 'AAPL' in backtest.portfolio
     assert backtest.portfolio['AAPL'] == expected_shares  # Should have half the initial shares
-    assert backtest.cash >= backtest.initial_fund * 0.45  # Should have recovered significant cash from selling
-
-def test_read_trading_ops():
-    # Create a temporary CSV file
-    with tempfile.NamedTemporaryFile(mode='w', delete=False, newline='') as f:
-        writer = csv.writer(f)
-        writer.writerows([
-            ['AAPL', '2024-01-01', 'BUY', '0.5'],
-            ['GOOGL', '2024-01-02', 'BUY', '0.3']
-        ])
-        temp_file = f.name
-    
-    try:
-        ops = Backtest.read_trading_ops(temp_file)
-        assert len(ops) == 2
-        assert ops[0] == ['AAPL', '2024-01-01', 'BUY', '0.5']
-        assert ops[1] == ['GOOGL', '2024-01-02', 'BUY', '0.3']
-    finally:
-        os.unlink(temp_file)  # Clean up temporary file
+    assert backtest.cash == pytest.approx(backtest.initial_fund * 0.5)  # Should have recovered significant cash from selling
 
 def test_invalid_sell(backtest, mock_price_loader):
     backtest.price_loader = mock_price_loader
-    end_day = datetime.strptime('2024-01-02', '%Y-%m-%d').date()
+    backtest.begin_eval_date = datetime.strptime('2024-01-01', '%Y-%m-%d').date()
+    backtest.end_eval_date = datetime.strptime('2024-01-02', '%Y-%m-%d').date()
     
     # Try to sell stock we don't own
     sell_op = ['AAPL', '2024-01-02', 'SELL', '0.5']
     
     with pytest.raises(Exception) as exc_info:
-        backtest.run([sell_op], end_day)
+        backtest.run([sell_op])
     assert "No shares of AAPL to sell" in str(exc_info.value)
 
 def test_portfolio_returns(backtest, mock_price_loader):
     backtest.price_loader = mock_price_loader
-    end_day = datetime.strptime('2024-01-04', '%Y-%m-%d').date()
+    backtest.begin_eval_date = datetime.strptime('2024-01-01', '%Y-%m-%d').date()
+    backtest.end_eval_date = datetime.strptime('2024-01-04', '%Y-%m-%d').date()
+    
+    # Mock stable prices for both next and last available prices
+    mock_price_loader.get_next_available_price.return_value = (100.0, '2024-01-01')
+    mock_price_loader.get_last_available_price.return_value = (100.0, '2024-01-01')
     
     # Mock prices for all the necessary calls
     mock_price_loader.get_last_available_price.side_effect = lambda sym, date, price_type, max_window_days=None: (
@@ -116,7 +161,7 @@ def test_portfolio_returns(backtest, mock_price_loader):
     
     # Buy operation using 50% of portfolio
     buy_op = ['AAPL', '2024-01-01', 'BUY', '0.5']
-    final_value = backtest.run([buy_op], end_day, return_history=False)
+    final_value = backtest.run([buy_op], return_history=False)
     
     # Calculate expected return:
     # 1. Initial investment of 500k (50% of 1M) buys 5000 shares at $100
@@ -124,11 +169,12 @@ def test_portfolio_returns(backtest, mock_price_loader):
     # 3. Return = Final value / Initial value = (500k + 550k) / 1M = 1.05
     expected_final_value = 1.05
     
-    assert abs(final_value - expected_final_value) < 0.0001  # Account for floating point precision
+    assert final_value == pytest.approx(expected_final_value, rel=1e-6)  # Account for floating point precision
 
 def test_portfolio_returns_multiple_buys(backtest, mock_price_loader):
     backtest.price_loader = mock_price_loader
-    end_day = datetime.strptime('2024-01-04', '%Y-%m-%d').date()
+    backtest.begin_eval_date = datetime.strptime('2024-01-01', '%Y-%m-%d').date()
+    backtest.end_eval_date = datetime.strptime('2024-01-04', '%Y-%m-%d').date()
     
     # Mock prices: AAPL starts at 100, ends at 110; GOOGL starts at 150, ends at 180
     def mock_price(sym, date, price_type, max_window_days=None):
@@ -147,32 +193,37 @@ def test_portfolio_returns_multiple_buys(backtest, mock_price_loader):
         ['GOOGL', '2024-01-01', 'BUY', '0.4']
     ]
     
-    final_value = backtest.run(operations, end_day, return_history=False)
+    final_value = backtest.run(operations, return_history=False)
     
     # Calculate expected return:
     # Initial portfolio: $1M
-    # AAPL investment: 300k -> 3000 shares -> worth 330k at end
-    # GOOGL investment: 400k -> 2666 shares -> worth ~480k at end
-    # Remaining cash: 300k
-    # Final value = (330k + 480k + 300k) / 1M ≈ 1.11
-    expected_final_value = 1.11
+    # AAPL investment: 300k -> 3000 shares -> worth 330000 at end
+    # GOOGL investment: 400k -> 2666 shares -> worth 479880 at end
+    # Remaining cash: 300,100
+    # Final value = (330,100 + 480,000 + 300,000) / 1M ≈ 1.10998
+    expected_final_value = 1.10998
     
-    assert abs(final_value - expected_final_value) < 0.01
+    assert final_value == pytest.approx(expected_final_value, rel=1e-6)
 
 def test_portfolio_returns_buy_sell_buy(backtest, mock_price_loader):
     backtest.price_loader = mock_price_loader
-    end_day = datetime.strptime('2024-01-04', '%Y-%m-%d').date()
+    backtest.begin_eval_date = datetime.strptime('2024-01-01', '%Y-%m-%d').date()
+    backtest.end_eval_date = datetime.strptime('2024-01-04', '%Y-%m-%d').date()
     
     # Mock a price sequence for AAPL: 100 -> 120 -> 110
     prices = {
         '2024-01-01': {'AAPL': 100.0},
         '2024-01-02': {'AAPL': 120.0},
+        '2024-01-03': {'AAPL': 25.3},
         '2024-01-04': {'AAPL': 110.0}
     }
-    
-    mock_price_loader.get_last_available_price.side_effect = lambda sym, date, price_type, max_window_days=None: (
+    #import pytest; pytest.set_trace()
+    mock_price_loader.get_next_available_price.side_effect = lambda sym, date, price_type, max_window_days=None: (
         (prices[date.strftime('%Y-%m-%d')][sym], date.strftime('%Y-%m-%d'))
     )
+    mock_price_loader.get_last_available_price.side_effect = lambda sym, date, price_type, max_window_days=None: (
+        (prices[date.strftime('%Y-%m-%d')][sym], date.strftime('%Y-%m-%d'))
+    )    
     
     # Operations: Buy -> Sell at peak -> Buy again
     operations = [
@@ -180,8 +231,8 @@ def test_portfolio_returns_buy_sell_buy(backtest, mock_price_loader):
         ['AAPL', '2024-01-02', 'SELL', 'ALL'],   # Sell all at 120
         ['AAPL', '2024-01-02', 'BUY', '0.5']     # Buy back half at 120
     ]
-    
-    final_value = backtest.run(operations, end_day, return_history=False)
+
+    final_value = backtest.run(operations, return_history=False)
     
     # Calculate expected return:
     # 1. Initial buy: $1M buys 10000 shares at $100
@@ -190,11 +241,12 @@ def test_portfolio_returns_buy_sell_buy(backtest, mock_price_loader):
     # 4. Final value: $600k cash + (5000 shares * $110) = $1.15M
     expected_final_value = 1.15  # 15% total return
     
-    assert abs(final_value - expected_final_value) < 0.01
+    assert final_value == pytest.approx(expected_final_value, rel=1e-6)
 
 def test_portfolio_returns_gradual_sells(backtest, mock_price_loader):
     backtest.price_loader = mock_price_loader
-    end_day = datetime.strptime('2024-01-04', '%Y-%m-%d').date()
+    backtest.begin_eval_date = datetime.strptime('2024-01-01', '%Y-%m-%d').date()
+    backtest.end_eval_date = datetime.strptime('2024-01-04', '%Y-%m-%d').date()
     
     # Mock rising prices: 100 -> 110 -> 120 -> 130
     prices = {
@@ -207,6 +259,9 @@ def test_portfolio_returns_gradual_sells(backtest, mock_price_loader):
     mock_price_loader.get_last_available_price.side_effect = lambda sym, date, price_type, max_window_days=None: (
         (prices[date.strftime('%Y-%m-%d')][sym], date.strftime('%Y-%m-%d'))
     )
+    mock_price_loader.get_next_available_price.side_effect = lambda sym, date, price_type, max_window_days=None: (
+        (prices[date.strftime('%Y-%m-%d')][sym], date.strftime('%Y-%m-%d'))
+    )    
     
     # Operations: Buy all, then gradually sell
     operations = [
@@ -216,7 +271,7 @@ def test_portfolio_returns_gradual_sells(backtest, mock_price_loader):
         ['AAPL', '2024-01-04', 'SELL', '0.2']     # Sell 20% of remainder at 130
     ]
     
-    final_value = backtest.run(operations, end_day, return_history=False)
+    final_value = backtest.run(operations, return_history=False)
     
     # Calculate expected return:
     # 1. Buy 10000 shares at $100 each ($1M)
@@ -229,11 +284,12 @@ def test_portfolio_returns_gradual_sells(backtest, mock_price_loader):
     # Total value: $1.205M
     expected_final_value = 1.205  # 20.5% total return
     
-    assert abs(final_value - expected_final_value) < 0.01
+    assert final_value == pytest.approx(expected_final_value, rel=1e-6)
 
 def test_portfolio_returns_price_gaps(backtest, mock_price_loader):
     backtest.price_loader = mock_price_loader
-    end_day = datetime.strptime('2024-01-04', '%Y-%m-%d').date()
+    backtest.begin_eval_date = datetime.strptime('2024-01-01', '%Y-%m-%d').date()
+    backtest.end_eval_date = datetime.strptime('2024-01-04', '%Y-%m-%d').date()
     
     # Mock prices with gaps (no data for Jan 2-3)
     prices = {
@@ -250,7 +306,8 @@ def test_portfolio_returns_price_gaps(backtest, mock_price_loader):
             return 100.0, '2024-01-01'
         raise Exception(f"No price data for {sym} on {date_str}")
     
-    mock_price_loader.get_last_available_price.side_effect = mock_price
+    mock_price_loader.get_last_available_price.side_effect = mock_price   
+    
     
     operations = [
         ['AAPL', '2024-01-01', 'BUY', '1.0'],
@@ -258,7 +315,7 @@ def test_portfolio_returns_price_gaps(backtest, mock_price_loader):
         ['AAPL', '2024-01-03', 'BUY', '0.3']    # Should use Jan 1 price
     ]
     
-    final_value = backtest.run(operations, end_day, return_history=False)
+    final_value = backtest.run(operations, return_history=False)
     
     # Calculate expected return:
     # 1. Buy 10000 shares at $100 ($1M)
@@ -267,11 +324,12 @@ def test_portfolio_returns_price_gaps(backtest, mock_price_loader):
     # 4. Final: $200k cash + (8000 shares * $120) = $1.16M
     expected_final_value = 1.16
     
-    assert abs(final_value - expected_final_value) < 0.01
+    assert final_value == pytest.approx(expected_final_value, rel=1e-6)
 
 def test_portfolio_returns_same_day_trades(backtest, mock_price_loader):
     backtest.price_loader = mock_price_loader
-    end_day = datetime.strptime('2024-01-04', '%Y-%m-%d').date()
+    backtest.begin_eval_date = datetime.strptime('2024-01-01', '%Y-%m-%d').date()
+    backtest.end_eval_date = datetime.strptime('2024-01-04', '%Y-%m-%d').date()
     
     # Mock stable price
     mock_price_loader.get_last_available_price.return_value = (100.0, '2024-01-01')
@@ -284,15 +342,16 @@ def test_portfolio_returns_same_day_trades(backtest, mock_price_loader):
         ['AAPL', '2024-01-01', 'SELL', '0.2']   # Sell a bit more
     ]
     
-    final_value = backtest.run(operations, end_day, return_history=False)
+    final_value = backtest.run(operations, return_history=False)
     
     # Verify that same-day trades don't compound returns incorrectly
     # Each trade should be at the same price point
-    assert abs(final_value - 1.0) < 0.01  # Should be ~1.0 as price hasn't changed
+    assert final_value == pytest.approx(1.0, rel=1e-6)  # Should be ~1.0 as price hasn't changed
 
 def test_portfolio_returns_tiny_trades(backtest, mock_price_loader):
     backtest.price_loader = mock_price_loader
-    end_day = datetime.strptime('2024-01-04', '%Y-%m-%d').date()
+    backtest.begin_eval_date = datetime.strptime('2024-01-01', '%Y-%m-%d').date()
+    backtest.end_eval_date = datetime.strptime('2024-01-04', '%Y-%m-%d').date()
     
     # Mock prices with small changes
     mock_price_loader.get_last_available_price.side_effect = lambda sym, date, price_type, max_window_days=None: (
@@ -308,14 +367,15 @@ def test_portfolio_returns_tiny_trades(backtest, mock_price_loader):
         ['AAPL', '2024-01-02', 'SELL', '0.0001']   # Microscopic sell
     ]
     
-    final_value = backtest.run(operations, end_day, return_history=False)
+    final_value = backtest.run(operations, return_history=False)
     
     # Should handle tiny trades without floating point errors
-    assert 0.99 <= final_value <= 1.01
+    assert final_value == pytest.approx(1.0, rel=1e-6)
 
 def test_portfolio_returns_extreme_moves(backtest, mock_price_loader):
     backtest.price_loader = mock_price_loader
-    end_day = datetime.strptime('2024-01-04', '%Y-%m-%d').date()
+    backtest.begin_eval_date = datetime.strptime('2024-01-01', '%Y-%m-%d').date()
+    backtest.end_eval_date = datetime.strptime('2024-01-04', '%Y-%m-%d').date()
     
     # Mock extreme price movements
     prices = {
@@ -348,8 +408,8 @@ def test_portfolio_returns_extreme_moves(backtest, mock_price_loader):
         ['AAPL', '2024-01-02', 'SELL', 'ALL'],    # Sell AAPL at 1
         ['GOOGL', '2024-01-02', 'SELL', '0.5']    # Sell half GOOGL at 1500
     ]
-    
-    final_value = backtest.run(operations, end_day, return_history=False)
+
+    final_value = backtest.run(operations, return_history=False)
     
     # Calculate expected return:
     # 1. Initial: $500k in each stock
@@ -359,16 +419,18 @@ def test_portfolio_returns_extreme_moves(backtest, mock_price_loader):
     #    - Cash: $5k (AAPL) + $2.5M (GOOGL half-sale)
     #    - Remaining GOOGL: 1666 shares * $3000 = $5M
     # Total value: $7.505M / $1M initial = 7.505
-    expected_final_value = 7.505
+    expected_final_value = 7.50505
     
-    assert abs(final_value - expected_final_value) < 0.01
+    assert final_value == pytest.approx(expected_final_value, rel=1e-6)
 
 def test_portfolio_returns_insufficient_funds(backtest, mock_price_loader):
     backtest.price_loader = mock_price_loader
-    end_day = datetime.strptime('2024-01-04', '%Y-%m-%d').date()
+    backtest.begin_eval_date = datetime.strptime('2024-01-01', '%Y-%m-%d').date()
+    backtest.end_eval_date = datetime.strptime('2024-01-04', '%Y-%m-%d').date()
     
     # Mock stable prices
     mock_price_loader.get_last_available_price.return_value = (100.0, '2024-01-01')
+
     
     # Try to buy more than we have funds for
     operations = [
@@ -377,15 +439,16 @@ def test_portfolio_returns_insufficient_funds(backtest, mock_price_loader):
         ['MSFT', '2024-01-01', 'BUY', '0.8']     # And another 80%
     ]
     
-    final_value = backtest.run(operations, end_day, return_history=False)
+    final_value = backtest.run(operations, return_history=False)
     
     # Despite attempting to buy 240% of portfolio value,
     # the final value should still be valid
-    assert 0.99 <= final_value <= 1.01  # Should be ~1.0 as price hasn't changed
+    assert final_value == pytest.approx(1.0, rel=1e-6)  # Should be ~1.0 as price hasn't changed
 
 def test_portfolio_returns_rebalancing(backtest, mock_price_loader):
     backtest.price_loader = mock_price_loader
-    end_day = datetime.strptime('2024-01-04', '%Y-%m-%d').date()
+    backtest.begin_eval_date = datetime.strptime('2024-01-01', '%Y-%m-%d').date()
+    backtest.end_eval_date = datetime.strptime('2024-01-04', '%Y-%m-%d').date()
     
     # Mock prices with diverging performance
     prices = {
@@ -398,6 +461,9 @@ def test_portfolio_returns_rebalancing(backtest, mock_price_loader):
     mock_price_loader.get_last_available_price.side_effect = lambda sym, date, price_type, max_window_days=None: (
         (prices[date.strftime('%Y-%m-%d')][sym], date.strftime('%Y-%m-%d'))
     )
+    mock_price_loader.get_next_available_price.side_effect = lambda sym, date, price_type, max_window_days=None: (
+        (prices[date.strftime('%Y-%m-%d')][sym], date.strftime('%Y-%m-%d'))
+    )    
     
     # Complex rebalancing operations
     operations = [
@@ -416,11 +482,28 @@ def test_portfolio_returns_rebalancing(backtest, mock_price_loader):
         ['MSFT', '2024-01-03', 'BUY', '0.1']
     ]
     
-    final_value = backtest.run(operations, end_day, return_history=False)
+    final_value = backtest.run(operations, return_history=False)
     
     # Portfolio should have benefited from:
     # 1. Reducing exposure to falling AAPL
     # 2. Increasing exposure to rising GOOGL
     # 3. Maintaining moderate exposure to stable MSFT
-    assert final_value > 1.0  # Should have positive return
-    assert abs(final_value - 1.13) < 0.02  # Approximately 13% return
+    assert final_value == pytest.approx(1.129294064, rel=1e-6)  # Approximately 13% return
+
+def test_read_trading_ops():
+    # Create a temporary CSV file
+    with tempfile.NamedTemporaryFile(mode='w', delete=False, newline='') as f:
+        writer = csv.writer(f)
+        writer.writerows([
+            ['AAPL', '2024-01-01', 'BUY', '0.5'],
+            ['GOOGL', '2024-01-02', 'BUY', '0.3']
+        ])
+        temp_file = f.name
+    
+    try:
+        ops = Backtest.read_trading_ops(temp_file)
+        assert len(ops) == 2
+        assert ops[0] == ['AAPL', '2024-01-01', 'BUY', '0.5']
+        assert ops[1] == ['GOOGL', '2024-01-02', 'BUY', '0.3']
+    finally:
+        os.unlink(temp_file)  # Clean up temporary file
