@@ -1,5 +1,5 @@
-DROP VIEW IF EXISTS valid_us_stocks;
-CREATE VIEW IF NOT EXISTS valid_us_stocks AS
+DROP TABLE IF EXISTS valid_us_stocks_der;
+CREATE TABLE IF NOT EXISTS valid_us_stocks_der AS
 WITH us_stocks AS (
     -- Filter for US stocks
     SELECT symbol, sector, industry
@@ -41,4 +41,5 @@ SELECT S.symbol, S.sector, S.industry
 FROM expected_days
 JOIN us_stocks S
     ON S.symbol = expected_days.symbol
-WHERE actual_days = expected_days;
+WHERE actual_days = expected_days
+    AND S.sector IS NOT NULL;
