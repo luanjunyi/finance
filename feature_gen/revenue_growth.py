@@ -1,13 +1,15 @@
 import pandas as pd
-from typing import Optional
+from typing import Optional, Dict, List
 import sqlite3
 from datetime import datetime
 import numpy as np
 from fmp_data import Dataset
 import time
 from tqdm import tqdm
+from feature_gen.base_feature import FinancialFeatureBase
 
-class RevenueGrowth:
+
+class RevenueGrowth(FinancialFeatureBase):
     """
     Feature that calculates year-over-year (YoY) growth of quarterly revenue for stocks.
     
@@ -16,30 +18,7 @@ class RevenueGrowth:
     Results are stored in the growth_features_der table in the database.
     """
     
-    def __init__(self, db_path: str = '/Users/jluan/code/finance/data/fmp_data.db'):
-        """
-        Initialize the RevenueGrowth feature.
-        
-        Args:
-            db_path: Path to the SQLite database
-        """
-        self.db_path = db_path
-    
-    def _get_valid_symbols(self):
-        """
-        Get valid symbols and their sectors from the valid_us_stocks_der table.
-        
-        Returns:
-            DataFrame with columns: symbol, sector
-        """
-        with sqlite3.connect(self.db_path) as conn:
-            query = """
-            SELECT symbol, sector
-            FROM valid_us_stocks_der
-            """
-            return pd.read_sql_query(query, conn)
-    
-    def _create_growth_features_table(self):
+    def _create_features_table(self):
         """
         Create the growth_features_der table if it doesn't exist.
         """
@@ -55,22 +34,6 @@ class RevenueGrowth:
                 PRIMARY KEY (symbol, date)
             )
             """)
-    
-    def _get_year_quarter(self, date_str):
-        """
-        Convert a date string to year-quarter format (e.g., '2024-09-30' -> '2024Q3').
-        
-        Args:
-            date_str: Date string in format 'YYYY-MM-DD'
-            
-        Returns:
-            String in format 'YYYYQN' where N is the quarter number (1-4)
-        """
-        date_obj = datetime.strptime(date_str, '%Y-%m-%d')
-        year = date_obj.year
-        month = date_obj.month
-        quarter = (month - 1) // 3 + 1
-        return f"{year}Q{quarter}"
     
     def calculate(self) -> pd.DataFrame:
         """
@@ -151,8 +114,7 @@ class RevenueGrowth:
                     yoy_growth = (current_revenue - prev_year_revenue) / abs(prev_year_revenue)
                     
                     # Get sector for this symbol
-                    sector = symbols_df[symbols_df['symbol'] == symbol]['sector'].iloc[0] if not symbols_df[symbols_df['symbol'] == symbol].empty else None
-                    
+                    sector = symbols_df[symbols_df['symbol'] == symbol]['sector'].iloc[0]
                     # Format date as string
                     date_str = current_date.strftime('%Y-%m-%d')
                     
@@ -176,84 +138,18 @@ class RevenueGrowth:
         
         print(f"Generated {len(result_df)} growth records. Calculating sector quantiles...")
         
-        # Calculate sector_quantile for each sector and year-quarter
-        result_df['sector_quantile'] = 0.0  # Default value
-        
-        # Group by sector and year_quarter
-        sector_year_quarters = result_df.groupby(['sector', 'year_quarter']).size().reset_index()
-        print(f"Found {len(sector_year_quarters)} unique sector-quarter combinations")
-        
-        # Create progress bar for sector quantile calculation
-        progress_bar = tqdm(sector_year_quarters.iterrows(), 
-                           total=len(sector_year_quarters),
-                           desc="Calculating sector quantiles", 
-                           unit="sector-quarter")
-        
-        for _, row in progress_bar:
-            sector = row['sector']
-            year_quarter = row['year_quarter']
-            progress_bar.set_description(f"Processing {sector} {year_quarter}")
-            
-            # Get group for this sector and year_quarter
-            group = result_df[(result_df['sector'] == sector) & 
-                             (result_df['year_quarter'] == year_quarter)]
-            
-            # Calculate the rank as a percentile within this sector and year-quarter
-            ranks = group['yoy'].rank(method='average', pct=True)
-            
-            # Update the sector_quantile values
-            for idx, rank in zip(group.index, ranks):
-                result_df.loc[idx, 'sector_quantile'] = rank
-        
-        # Sort by symbol and date
-        result_df = result_df.sort_values(['symbol', 'date'], ascending=[True, False])
+        # Use the base class method to calculate sector quantiles
+        result_df = self.calculate_sector_quantiles(result_df, 'yoy')
         
         print(f"Calculation complete. Generated {len(result_df)} total records.")
         return result_df
     
-    def store_in_database(self):
+    def _get_table_name(self) -> str:
         """
-        Calculate revenue growth and store results in the growth_features_der table.
-        """
-        start_time = time.time()
-        
-        # Create the table if it doesn't exist
-        self._create_growth_features_table()
-        print("Created/verified growth_features_der table in database.")
-        
-        # Calculate growth features
-        print("\n=== Starting Revenue Growth Calculation ===\n")
-        growth_df = self.calculate()
-        
-        if growth_df.empty:
-            print("No growth data to store.")
-            return
-        
-        # Store in database
-        print("\n=== Beginning Database Write ===\n")
-        with sqlite3.connect(self.db_path) as conn:
-            print("Clearing existing data from growth_features_der table...")
-            conn.execute("DELETE FROM growth_features_der")
-            
-            print(f"Writing {len(growth_df)} records to database...")
-            growth_df.to_sql('growth_features_der', conn, if_exists='append', index=False)
-            
-            end_time = time.time()
-            duration = end_time - start_time
-            minutes = int(duration // 60)
-            seconds = int(duration % 60)
-            
-            print(f"\n=== Finished! ===\n")
-            print(f"Stored {len(growth_df)} growth records in database.")
-            print(f"Total processing time: {minutes} minutes and {seconds} seconds.")
-    
-    def get_revenue_growth(self) -> pd.DataFrame:
-        """
-        Get the revenue growth DataFrame from the database.
+        Get the name of the database table where revenue growth features are stored.
         
         Returns:
-            DataFrame with columns: symbol, sector, date, yoy, sector_quantile, year_quarter
+            String with the table name
         """
-        with sqlite3.connect(self.db_path) as conn:
-            query = "SELECT * FROM growth_features_der ORDER BY symbol, date DESC"
-            return pd.read_sql_query(query, conn)
+        return 'growth_features_der'
+

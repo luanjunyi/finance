@@ -24,26 +24,6 @@ def mock_revenue_growth():
         yield revenue_growth, mock_dataset
 
 
-def test_get_year_quarter(mock_revenue_growth):
-    """Test the _get_year_quarter method."""
-    revenue_growth, _ = mock_revenue_growth
-    
-    test_cases = [
-        ('2024-01-15', '2024Q1'),
-        ('2024-03-31', '2024Q1'),
-        ('2024-04-01', '2024Q2'),
-        ('2024-06-30', '2024Q2'),
-        ('2024-07-01', '2024Q3'),
-        ('2024-09-30', '2024Q3'),
-        ('2024-10-01', '2024Q4'),
-        ('2024-12-31', '2024Q4'),
-    ]
-    
-    for date_str, expected in test_cases:
-        result = revenue_growth._get_year_quarter(date_str)
-        assert result == expected
-
-
 def test_calculate_yoy_growth(mock_revenue_growth):
     """Test the calculation of YoY growth rates."""
     revenue_growth, mock_dataset_class = mock_revenue_growth
