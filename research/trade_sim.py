@@ -134,7 +134,7 @@ class Backtest:
                         current_value = self.get_portfolio_value(trade_date)
                         dollar_amount = max(current_value * fraction, self.min_position_dollar)
                         if dollar_amount > self.cash:                            
-                            # Calculate return up to this poin
+                            # Calculate return up to this point
                             period_return = current_value / previous_fund_value
                             current_cumulative_return *= period_return
                             

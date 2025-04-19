@@ -335,7 +335,7 @@ def test_store_in_database(mock_test_feature):
         mock_to_sql.assert_called_once()
         args, kwargs = mock_to_sql.call_args
         assert args[0] == 'test_features'
-        assert kwargs['if_exists'] == 'fail'
+        assert kwargs['if_exists'] == 'replace'
         assert kwargs['index'] == False
 
 
