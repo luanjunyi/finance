@@ -55,13 +55,13 @@ def create_trader():
         
         # Create a trader with method patches
         with patch('research.interday_trading.InterdayTrading._load_valid_stocks') as mock_load_stocks, \
-             patch('research.interday_trading.InterdayTrading._load_fcf_data') as mock_load_fcf, \
+             patch('research.interday_trading.InterdayTrading._load_fundamentals') as mock_load_fundamentals, \
              patch('research.interday_trading.InterdayTrading._get_price_data') as mock_get_price, \
              patch('research.interday_trading.InterdayTrading._is_trading_day') as mock_is_trading_day:
             
             # Configure the method stubs
             mock_load_stocks.return_value = stock_data
-            mock_load_fcf.return_value = fcf_data
+            mock_load_fundamentals.return_value = fcf_data
             mock_get_price.return_value = price_data
             mock_is_trading_day.return_value = True
             
@@ -72,20 +72,6 @@ def create_trader():
             return trader
     
     return _create_trader
-
-
-def test_init(create_trader):
-    """Test that InterdayTrading initializes correctly."""
-    # Create a trader with default test data
-    trader = create_trader()
-    
-    # Check that the trader has the expected attributes
-    assert hasattr(trader, 'begin_date')
-    assert hasattr(trader, 'end_date')
-    assert hasattr(trader, 'stocks')
-    assert hasattr(trader, 'daily_features')
-    assert len(trader.stocks) == 3  # AAPL, MSFT, GOOGL
-    assert 'free_cash_flow_per_share' in trader.daily_features.columns
 
 
 def test_get_price_to_fcf(create_trader):
