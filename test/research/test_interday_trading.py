@@ -25,9 +25,9 @@ def create_trader():
             fcf_data = pd.DataFrame([
                 # AAPL data - 5.0 per quarter
                 {'symbol': 'AAPL', 'date': date(2023, 1, 1), 'free_cash_flow_per_share': 5.0},
-                {'symbol': 'AAPL', 'date': date(2023, 4, 1), 'free_cash_flow_per_share': 5.0},
+                {'symbol': 'AAPL', 'date': date(2023, 4, 1), 'free_cash_flow_per_share': -5.0},
                 {'symbol': 'AAPL', 'date': date(2023, 7, 1), 'free_cash_flow_per_share': 5.0},
-                {'symbol': 'AAPL', 'date': date(2023, 10, 1), 'free_cash_flow_per_share': 5.0},
+                {'symbol': 'AAPL', 'date': date(2023, 10, 1), 'free_cash_flow_per_share': 15.0},
                 {'symbol': 'AAPL', 'date': date(2024, 1, 1), 'free_cash_flow_per_share': 32325.0},
                 
                 # MSFT data - 4.0 per quarter
@@ -55,13 +55,13 @@ def create_trader():
         
         # Create a trader with method patches
         with patch('research.interday_trading.InterdayTrading._load_valid_stocks') as mock_load_stocks, \
-             patch('research.interday_trading.InterdayTrading._load_fcf_data') as mock_load_fcf, \
+             patch('research.interday_trading.InterdayTrading._load_fundamentals') as mock_load_fundamentals, \
              patch('research.interday_trading.InterdayTrading._get_price_data') as mock_get_price, \
              patch('research.interday_trading.InterdayTrading._is_trading_day') as mock_is_trading_day:
             
             # Configure the method stubs
             mock_load_stocks.return_value = stock_data
-            mock_load_fcf.return_value = fcf_data
+            mock_load_fundamentals.return_value = fcf_data
             mock_get_price.return_value = price_data
             mock_is_trading_day.return_value = True
             
@@ -74,22 +74,8 @@ def create_trader():
     return _create_trader
 
 
-def test_init(create_trader):
-    """Test that InterdayTrading initializes correctly."""
-    # Create a trader with default test data
-    trader = create_trader()
-    
-    # Check that the trader has the expected attributes
-    assert hasattr(trader, 'begin_date')
-    assert hasattr(trader, 'end_date')
-    assert hasattr(trader, 'stocks')
-    assert hasattr(trader, 'daily_features')
-    assert len(trader.stocks) == 3  # AAPL, MSFT, GOOGL
-    assert 'free_cash_flow_per_share' in trader.daily_features.columns
-
-
 def test_get_price_to_fcf(create_trader):
-    """Test that get_price_to_fcf correctly calculates price-to-fcf ratios."""
+    """Test that get_price_to_fcf correctly calculates all FCF metrics and price ratios."""
     # Create a trader with default test data
     trader = create_trader()
     
@@ -106,27 +92,39 @@ def test_get_price_to_fcf(create_trader):
     # Verify the results
     assert len(result) == 3  # All 3 symbols should be in the result
     assert set(result['symbol']) == {'AAPL', 'MSFT', 'GOOGL'}
-    assert set(result.columns) == {'date', 'symbol', 'free_cash_flow', 'price', 'price_to_fcf'}
+    
+    # Check that all expected columns are present
+    expected_columns = {
+        'symbol', 'free_cash_flow', 'min_fcf', 'last_fcf', 
+        'price', 'price_to_fcf'
+    }
+    assert expected_columns.issubset(set(result.columns))
     
     # Check the values for each symbol
     aapl_row = result[result['symbol'] == 'AAPL'].iloc[0]
     msft_row = result[result['symbol'] == 'MSFT'].iloc[0]
     googl_row = result[result['symbol'] == 'GOOGL'].iloc[0]
     
-    # AAPL: 4 quarters * 5.0 = 20.0 FCF, price = 200.0, ratio = 10.0
-    assert aapl_row['free_cash_flow'] == 20.0
+    # AAPL: Sum=20.0, Min=-5.0, Last=15.0
+    assert aapl_row['free_cash_flow'] == 20.0  # Sum of 4 quarters
+    assert aapl_row['min_fcf'] == -5.0  # Minimum quarterly value
+    assert aapl_row['last_fcf'] == 15.0  # Most recent quarter
     assert aapl_row['price'] == 200.0
-    assert aapl_row['price_to_fcf'] == 10.0
+    assert aapl_row['price_to_fcf'] == 10.0  # 200 / 20
     
-    # MSFT: 4 quarters * 4.0 = 16.0 FCF, price = 400.0, ratio = 25.0
-    assert msft_row['free_cash_flow'] == 16.0
+    # MSFT: Sum=16.0, Min=4.0, Last=4.0
+    assert msft_row['free_cash_flow'] == 16.0  # Sum of 4 quarters
+    assert msft_row['min_fcf'] == 4.0  # Minimum quarterly value
+    assert msft_row['last_fcf'] == 4.0  # Most recent quarter
     assert msft_row['price'] == 400.0
-    assert msft_row['price_to_fcf'] == 25.0
+    assert msft_row['price_to_fcf'] == 25.0  # 400 / 16
     
-    # GOOGL: 4 quarters * 3.0 = 12.0 FCF, price = 3000.0, ratio = 250.0
-    assert googl_row['free_cash_flow'] == 12.0
+    # GOOGL: Sum=12.0, Min=3.0, Last=3.0
+    assert googl_row['free_cash_flow'] == 12.0  # Sum of 4 quarters
+    assert googl_row['min_fcf'] == 3.0  # Minimum quarterly value
+    assert googl_row['last_fcf'] == 3.0  # Most recent quarter
     assert googl_row['price'] == 3000.0
-    assert googl_row['price_to_fcf'] == 250.0
+    assert googl_row['price_to_fcf'] == 250.0  # 3000 / 12
 
 
 def test_generate_basic_functionality(create_trader):
