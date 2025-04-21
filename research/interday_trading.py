@@ -5,6 +5,7 @@ import logging
 from datetime import datetime, date, timedelta
 from tqdm import tqdm
 from fmp_data import FMPPriceLoader, Dataset
+import numpy as np
 
 
 class InterdayTrading:
@@ -27,7 +28,7 @@ class InterdayTrading:
         self.db_path = '/Users/jluan/code/finance/data/fmp_data.db'
         # Load valid symbols, sectors, industries
         self.stocks = self._load_valid_stocks()
-        # Load free_cash_flow_per_share history
+        # Load fundamentals from financial statements
         self.fundamentals = self._load_fundamentals(self.stocks['symbol'].tolist())
     
     def _load_valid_stocks(self) -> pd.DataFrame:
@@ -55,12 +56,15 @@ class InterdayTrading:
             return False        
     
     def _load_fundamentals(self, symbols: list) -> pd.DataFrame:
-        """Load free cash flow per share data for the given symbols."""
+        """Load fundamentals from financial statements"""
         assert len(symbols) > 0, "No symbols provided"
-        ds = Dataset(symbols, metrics={'free_cash_flow_per_share':'free_cash_flow_per_share'})
+        ds = Dataset(symbols, metrics={
+            'free_cash_flow_per_share': 'free_cash_flow_per_share',
+            'revenue': 'revenue'
+        })
         fundamentals = ds.get_data()
         fundamentals['date'] = pd.to_datetime(fundamentals['date']).dt.date
-        return fundamentals[['symbol','date','free_cash_flow_per_share']]
+        return fundamentals[['symbol', 'date', 'free_cash_flow_per_share', 'revenue']]
     
     def _get_price_data(self, symbols: list, current_date: date) -> pd.DataFrame:
         """
@@ -82,6 +86,36 @@ class InterdayTrading:
         price_data['date'] = pd.to_datetime(price_data['date']).dt.date
         return price_data[price_data['date'] == current_date][['symbol','price']]
     
+    def _filter_fundamentals(self, current_date: date, window_days: int, min_records: int) -> pd.DataFrame:
+        """
+        Filter fundamentals data to a specific window and ensure minimum record count.
+        
+        Args:
+            current_date: Date to calculate for
+            window_days: Number of days to look back from the last quarter date
+            min_records: Minimum number of records required per symbol
+            
+        Returns:
+            DataFrame with filtered fundamentals data, sorted by symbol and date (descending)
+        """
+        # Compute window bounds
+        last_quarter_date = current_date - timedelta(days=90)
+        first_quarter_date = last_quarter_date - timedelta(days=window_days)
+        window = self.fundamentals[
+            (self.fundamentals['date'] >= first_quarter_date) &
+            (self.fundamentals['date'] <= last_quarter_date)
+        ]
+        
+        # Find symbols with enough data
+        counts = window.groupby('symbol').size().reset_index(name='count')
+        valid_symbols = counts[counts['count'] >= min_records]['symbol'].tolist()
+        
+        # Filter for valid symbols and sort by date (descending)
+        window_valid = window[window['symbol'].isin(valid_symbols)]
+        sorted_window = window_valid.sort_values(['symbol', 'date'], ascending=[True, False])
+        
+        return sorted_window
+        
     def get_price_to_fcf(self, price_data: pd.DataFrame, current_date: date) -> pd.DataFrame:
         """
         Calculate free cash flow metrics and price-to-FCF ratio for stocks.
@@ -106,22 +140,11 @@ class InterdayTrading:
             - price: Current stock price
             - price_to_fcf: Price divided by sum of FCF
         """
-        # Compute FCF window bounds
-        last_quarter_date = current_date - timedelta(days=90)
-        first_quarter_date = last_quarter_date - timedelta(days=460)
-        window = self.fundamentals[
-            (self.fundamentals['date'] >= first_quarter_date) &
-            (self.fundamentals['date'] <= last_quarter_date)
-        ]
+        # Filter fundamentals data for the required window (4 quarters)
+        sorted_window = self._filter_fundamentals(current_date, 400, 4)
         
-        # Find symbols with enough data (at least 4 records)
-        counts = window.groupby('symbol').size().reset_index(name='count')
-        valid_symbols = counts[counts['count'] >= 4]['symbol'].tolist()
-        
-        # Calculate FCF metrics for each symbol using the 4 most recent quarters
-        window_valid = window[window['symbol'].isin(valid_symbols)]
-        sorted_win = window_valid.sort_values(['symbol', 'date'], ascending=[True, False])
-        last4 = sorted_win.groupby('symbol').head(4)
+        # Take the 4 most recent quarters for each symbol
+        last4 = sorted_window.groupby('symbol').head(4)
         
         # Calculate sum of FCF over the 4 quarters
         sum_fcf = last4.groupby('symbol')['free_cash_flow_per_share'] \
@@ -145,6 +168,76 @@ class InterdayTrading:
         
         return df
 
+    def get_revenue_growth(self, current_date: date) -> pd.DataFrame:
+        """
+        Calculate revenue growth metrics for stocks.
+        
+        This method computes multiple revenue growth metrics using the past 8 quarters of data:
+        - Median YoY growth over the past 4 quarters (median_yoy)
+        - Minimum YoY growth over the past 4 quarters (min_yoy)
+        - Most recent quarter's YoY growth (last_yoy)
+        
+        Args:
+            current_date: Date to calculate for
+            
+        Returns:
+            DataFrame with columns:
+            - symbol: Stock symbol
+            - median_yoy: Median YoY revenue growth over past 4 quarters
+            - min_yoy: Minimum YoY revenue growth over past 4 quarters
+            - last_yoy: Most recent quarter's YoY revenue growth
+        """
+        # Filter fundamentals data for the required window (8 quarters)
+        window_valid = self._filter_fundamentals(current_date, 90 * 8, 8)
+        
+        # Get the list of valid symbols
+        valid_symbols = window_valid['symbol'].unique().tolist()
+        
+        # Calculate YoY growth for each symbol
+        growth_results = []
+        
+        for symbol in valid_symbols:
+            symbol_data = window_valid[window_valid['symbol'] == symbol]
+            symbol_data = symbol_data.sort_values('date', ascending=False)
+            
+            # Need at least 8 quarters of data to calculate 4 YoY growth values
+            if len(symbol_data) < 8:
+                continue
+                
+            # Calculate YoY growth for the 4 most recent quarters
+            yoy_values = []
+            
+            for i in range(4):  # Calculate 4 YoY values
+                if i + 4 >= len(symbol_data):
+                    break
+                    
+                current_quarter = symbol_data.iloc[i]
+                prev_year_quarter = symbol_data.iloc[i + 4]  # Same quarter, previous year
+                
+                current_revenue = current_quarter['revenue']
+                prev_year_revenue = prev_year_quarter['revenue']
+                
+                if prev_year_revenue and prev_year_revenue != 0:
+                    yoy_growth = (current_revenue - prev_year_revenue) / abs(prev_year_revenue)
+                    yoy_values.append(yoy_growth)
+            
+            # Only include symbols with at least 4 YoY growth values
+            if len(yoy_values) >= 4:
+                growth_results.append({
+                    'symbol': symbol,
+                    'median_yoy': np.median(yoy_values),
+                    'min_yoy': min(yoy_values),
+                    'last_yoy': yoy_values[0]  # Most recent quarter's YoY growth
+                })
+        
+        # Convert results to DataFrame
+        growth_df = pd.DataFrame(growth_results)
+        
+        if growth_df.empty:
+            return pd.DataFrame(columns=['symbol', 'median_yoy', 'min_yoy', 'last_yoy'])
+        
+        return growth_df
+
     def build_features_for_date(self, date: date) -> pd.DataFrame:
         """
         Build features for a specific date, including price-to-FCF ratios and sector/industry information.
@@ -162,6 +255,9 @@ class InterdayTrading:
             - last_fcf: Most recent quarter's FCF
             - price: Current stock price
             - price_to_fcf: Price divided by sum of FCF
+            - median_yoy: Median YoY revenue growth over past 4 quarters
+            - min_yoy: Minimum YoY revenue growth over past 4 quarters
+            - last_yoy: Most recent quarter's YoY revenue growth
             - date: The date for which features were built
         """
         # Get price data for all stocks on current_date
@@ -171,7 +267,15 @@ class InterdayTrading:
         
         # Combine free cash flow and price into price_to_fcf
         self.logger.info("Calculating price-to-FCF ratios")
-        df = self.get_price_to_fcf(price_data, date)
+        fcf_df = self.get_price_to_fcf(price_data, date)
+        
+        # Calculate revenue growth metrics
+        self.logger.info("Calculating revenue growth metrics")
+        growth_df = self.get_revenue_growth(date)
+        
+        # Merge FCF and revenue growth metrics
+        self.logger.info("Merging feature data")
+        df = pd.merge(fcf_df, growth_df, on='symbol', how='outer')
         
         # Add sector and industry information
         self.logger.info("Adding sector and industry information")
