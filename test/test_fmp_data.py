@@ -78,7 +78,7 @@ def test_dataset_after_price_metrics(test_db):
             AFTER_PRICE: 'price',
             'revenue': 'rev'  # Include a regular metric
         },
-        for_date='2024-01-01',  # Changed from 2024-01-02 to match expected behavior
+        for_date='2024-01-01',  # Single date as string
         db_path=test_db
     )
     
@@ -147,6 +147,56 @@ def test_dataset_multiple_symbols(test_db, sample_symbols):
     assert googl_data['rev'] == 80000000
     assert googl_data['net_inc'] == 20000000
     assert googl_data['return_on_equity'] == 0.12
+
+
+def test_dataset_multiple_dates(test_db):
+    """Test Dataset with multiple dates in for_date parameter."""
+    # Test with a list of dates
+    dataset = Dataset(
+        symbol='AAPL',
+        metrics={'close': 'price'},
+        for_date=['2024-01-01', '2024-01-02'],  # Multiple dates as list
+        db_path=test_db
+    )
+    
+    # Check if we have data for both dates
+    assert len(dataset.data) == 2
+    assert all(date in dataset.data['date'].values for date in ['2024-01-01', '2024-01-02'])
+    
+    # Verify price values for each date
+    jan1_data = dataset.data[dataset.data['date'] == '2024-01-01'].iloc[0]
+    jan2_data = dataset.data[dataset.data['date'] == '2024-01-02'].iloc[0]
+    
+    assert jan1_data['price'] == 102.0
+    assert jan2_data['price'] == 105.0
+
+
+def test_dataset_empty_result_with_nonexistent_date(test_db):
+    """Test Dataset with a date that doesn't exist in the database."""
+    dataset = Dataset(
+        symbol='AAPL',
+        metrics={'close': 'price'},
+        for_date=['2024-01-03'],  # This date doesn't exist in test_db
+        db_path=test_db
+    )
+    
+    # Check that we get an empty DataFrame
+    assert dataset.data.empty
+
+
+def test_dataset_mixed_existing_nonexisting_dates(test_db):
+    """Test Dataset with a mix of existing and non-existing dates."""
+    dataset = Dataset(
+        symbol='AAPL',
+        metrics={'close': 'price'},
+        for_date=['2024-01-01', '2024-01-03'],  # One exists, one doesn't
+        db_path=test_db
+    )
+    
+    # Check that we only get data for the existing date
+    assert len(dataset.data) == 1
+    assert dataset.data.iloc[0]['date'] == '2024-01-01'
+    assert dataset.data.iloc[0]['price'] == 102.0
 
 
 

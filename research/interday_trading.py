@@ -85,6 +85,41 @@ class InterdayTrading:
         price_data = price_ds.get_data()
         price_data['date'] = pd.to_datetime(price_data['date']).dt.date
         return price_data[price_data['date'] == current_date][['symbol','price']]
+        
+    def _get_price_before(self, symbols: list, target_date: date) -> pd.DataFrame:
+        """
+        Get price data for the given symbols on the most recent trading day on or before the target date.
+        
+        Args:
+            symbols: List of symbols to get prices for
+            target_date: Target date to get prices for or before
+            
+        Returns:
+            DataFrame with symbol, price, and actual_date columns
+        """
+        # Start with the target date
+        check_date = target_date
+        
+        # Find the most recent trading day (going backward in time)
+        max_attempts = 5  # Limit the number of days to check to avoid infinite loop
+        attempts = 0
+        
+        while attempts < max_attempts:
+            if self._is_trading_day(check_date):
+                # Found a trading day, get price data
+                self.logger.debug(f"Found trading day {check_date} for target date {target_date}")
+                price_data = self._get_price_data(symbols, check_date)
+                
+                # Add the actual date to the result
+                price_data['actual_date'] = check_date
+                return price_data
+            
+            # Move to previous day
+            check_date = check_date - timedelta(days=1)
+            attempts += 1
+        
+        # If we couldn't find a trading day after max_attempts, return empty DataFrame
+        raise ValueError(f"Could not find trading day within {max_attempts} days before {target_date}")
     
     def _filter_fundamentals(self, current_date: date, window_days: int, min_records: int) -> pd.DataFrame:
         """
@@ -237,6 +272,69 @@ class InterdayTrading:
             return pd.DataFrame(columns=['symbol', 'median_yoy', 'min_yoy', 'last_yoy'])
         
         return growth_df
+        
+    def get_price_momentum(self, current_date: date) -> pd.DataFrame:
+        """
+        Calculate price momentum metrics for stocks.
+        
+        This method computes price momentum metrics by comparing current price (p0) with:
+        - Price 1 month ago (p1)
+        - Price 2 months ago (p2)
+        - Price 3 months ago (p3)
+        
+        It calculates:
+        - 3-month return: p0/p3 - 1
+        - Minimum monthly return: min(p0/p1 - 1, p1/p2 - 1, p2/p3 - 1)
+        
+        Args:
+            current_date: Date to calculate for
+            
+        Returns:
+            DataFrame with columns:
+            - symbol: Stock symbol
+            - three_month_return: Price return over 3 months
+            - min_monthly_return: Minimum monthly return over the 3 months
+        """
+        symbols = self.stocks['symbol'].tolist()
+        self.logger.info(f"Calculating price momentum for {len(symbols)} stocks")
+        
+        # Calculate dates for 1, 2, and 3 months ago
+        date_1m_ago = current_date - timedelta(days=30)
+        date_2m_ago = current_date - timedelta(days=60)
+        date_3m_ago = current_date - timedelta(days=90)
+        
+        # Get price data for current date and 1, 2, 3 months ago using _get_price_before
+        # to ensure we get data even if the dates are not trading days
+        p0_data = self._get_price_before(symbols, current_date)
+        p1_data = self._get_price_before(symbols, date_1m_ago)
+        p2_data = self._get_price_before(symbols, date_2m_ago)
+        p3_data = self._get_price_before(symbols, date_3m_ago)
+        
+        # Rename price columns to avoid confusion when merging
+        p0_data = p0_data.rename(columns={'price': 'p0', 'actual_date': 'date_p0'})
+        p1_data = p1_data.rename(columns={'price': 'p1', 'actual_date': 'date_p1'})
+        p2_data = p2_data.rename(columns={'price': 'p2', 'actual_date': 'date_p2'})
+        p3_data = p3_data.rename(columns={'price': 'p3', 'actual_date': 'date_p3'})
+        
+        # Merge all price data
+        merged_data = p0_data.merge(p1_data, on='symbol', how='inner')
+        merged_data = merged_data.merge(p2_data, on='symbol', how='inner')
+        merged_data = merged_data.merge(p3_data, on='symbol', how='inner')
+        
+        # Calculate returns
+        merged_data['return_0_to_1'] = merged_data['p0'] / merged_data['p1'] - 1
+        merged_data['return_1_to_2'] = merged_data['p1'] / merged_data['p2'] - 1
+        merged_data['return_2_to_3'] = merged_data['p2'] / merged_data['p3'] - 1
+        
+        # Calculate 3-month return and minimum monthly return
+        merged_data['three_month_return'] = merged_data['p0'] / merged_data['p3'] - 1
+        merged_data['min_monthly_return'] = merged_data[['return_0_to_1', 'return_1_to_2', 'return_2_to_3']].min(axis=1)
+        
+        # Select only the required columns
+        result_df = merged_data[['symbol', 'three_month_return', 'min_monthly_return']]
+        
+        self.logger.info(f"Calculated price momentum for {len(result_df)} stocks")
+        return result_df
 
     def build_features_for_date(self, date: date) -> pd.DataFrame:
         """
@@ -273,9 +371,14 @@ class InterdayTrading:
         self.logger.info("Calculating revenue growth metrics")
         growth_df = self.get_revenue_growth(date)
         
-        # Merge FCF and revenue growth metrics
+        # Calculate price momentum metrics
+        self.logger.info("Calculating price momentum metrics")
+        momentum_df = self.get_price_momentum(date)
+        
+        # Merge all feature dataframes
         self.logger.info("Merging feature data")
         df = pd.merge(fcf_df, growth_df, on='symbol', how='outer')
+        df = pd.merge(df, momentum_df, on='symbol', how='outer')
         
         # Add sector and industry information
         self.logger.info("Adding sector and industry information")

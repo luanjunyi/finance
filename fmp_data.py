@@ -11,26 +11,35 @@ AFTER_PRICE = 'after_price'
 PRICE_METRICS = {BEFORE_PRICE, AFTER_PRICE}
 
 class Dataset:
-    def __init__(self, symbol: Union[str, List[str]], metrics: Dict[str, str], for_date: str | None = None, db_path: str = '/Users/jluan/code/finance/data/fmp_data.db'):
+    def __init__(self, symbol: Union[str, List[str]], metrics: Dict[str, str], for_date: Union[str, List[str]] = None, db_path: str = '/Users/jluan/code/finance/data/fmp_data.db'):
         """Initialize Dataset object.
         
         Args:
             symbol (Union[str, List[str]]): Stock symbol or list of stock symbols
             metrics (Dict[str, str]): Dictionary mapping metrics to their renamed columns. 
                                     If value is empty string or None, the original metric name is used.
+            for_date (Union[str, List[str]]): A specific date or list of dates to filter by in 'YYYY-MM-DD' format.
+                                           Data will be filtered to include only exact date matches.
             db_path (str): Path to SQLite database
         
         Attributes:
             data (pd.DataFrame): The dataset as a pandas DataFrame.
             symbol (Union[str, List[str]]): Stock symbol(s).
             metrics (Dict[str, str]): Dictionary mapping metrics to their renamed columns.
+            for_date (Union[str, List[str]]): Date(s) to filter by.
             db_path (str): Path to SQLite database.
         """
 
         self.symbol = [symbol] if isinstance(symbol, str) else symbol
         self.metrics = metrics
         self.db_path = db_path
-        self.for_date = for_date
+        
+        # Convert for_date to a list if it's a single string or None
+        if isinstance(for_date, str):
+            self.for_date = [for_date,]
+        else:
+            self.for_date = for_date
+            
         self.data = self.build()
 
     def __getattr__(self, name):
@@ -99,7 +108,7 @@ class Dataset:
                         assert metric == AFTER_PRICE
                         price, _ = price_loader.get_next_available_price(symbol, date)
                 except KeyError:
-                        logging.warning(f'Failed to fetch historical price for {symbol} on {date}')
+                    logging.warning(f'Failed to fetch historical price for {symbol} on {date}')
                 else:
                     row[metric] = price
             price_data.append(row)
@@ -123,14 +132,27 @@ class Dataset:
         dfs = []
         with sqlite3.connect(self.db_path) as conn:
             for table, metrics in table_metrics.items():
-                placeholders = ','.join(['?' for _ in self.symbol])
+                # Create placeholders for symbols
+                symbol_placeholders = ','.join(['?' for _ in self.symbol])
+                
+                # Build the query with date filter if for_date is provided
                 query = f"""
                 SELECT date, symbol, {', '.join(metrics)}
                 FROM {table}
-                WHERE symbol IN ({placeholders})
-                ORDER BY date
+                WHERE symbol IN ({symbol_placeholders})
                 """
-                df = pd.read_sql_query(query, conn, params=tuple(self.symbol))
+                
+                params = list(self.symbol)
+                
+                # Add date filter if for_date is provided
+                if self.for_date:
+                    date_placeholders = ','.join(['?' for _ in self.for_date])
+                    query += f" AND date IN ({date_placeholders})"
+                    params.extend(self.for_date)
+                
+                query += " ORDER BY date"
+                
+                df = pd.read_sql_query(query, conn, params=tuple(params))
                 dfs.append(df)
 
         # dfs can't be empty because either there are regular prices (when we just want historical price data) or 
@@ -169,14 +191,6 @@ class Dataset:
             result = result.rename(columns=rename_dict)
 
         result = result.sort_values(['symbol', 'date'])
-
-        # Filter data based on for_date if provided
-        if self.for_date:
-            # First filter to keep only data on or before for_date
-            result = result[result['date'] <= self.for_date]
-            if not result.empty:
-                # For each symbol, keep only the row with the most recent date
-                result = result.loc[result.groupby('symbol')['date'].idxmax()]
 
         return result
 

@@ -257,6 +257,160 @@ def test_filter_fundamentals(create_trader):
         assert dates == sorted(dates, reverse=True)
 
 
+def test_get_price_before(create_trader):
+    """Test that _get_price_before correctly finds the most recent trading day and returns price data."""
+    # Create a trader with default test data
+    # This will set up the basic instance with mocked _load_valid_stocks and _load_fundamentals
+    trader = create_trader()
+    
+    # Mock _is_trading_day to return False for the target date and True for the day before
+    def is_trading_day_side_effect(check_date):
+        # Return True only for 2024-01-04, False for 2024-01-05
+        return check_date == date(2024, 1, 4)
+    
+    # Mock _get_price_data to return test data for the trading day
+    def get_price_data_side_effect(symbols, current_date):
+        if current_date == date(2024, 1, 4):
+            return pd.DataFrame({
+                'symbol': ['AAPL', 'MSFT', 'GOOGL'],
+                'price': [150.0, 300.0, 2000.0]
+            })
+        return pd.DataFrame(columns=['symbol', 'price'])
+    
+    # Apply the mocks
+    trader._is_trading_day = MagicMock(side_effect=is_trading_day_side_effect)
+    trader._get_price_data = MagicMock(side_effect=get_price_data_side_effect)
+    
+    # Test case 1: Non-trading day (should find previous trading day)
+    target_date = date(2024, 1, 8)  # Not a trading day
+    result = trader._get_price_before(['AAPL', 'MSFT', 'GOOGL'], target_date)
+    
+    # Verify the results
+    assert len(result) == 3
+    assert set(result['symbol']) == {'AAPL', 'MSFT', 'GOOGL'}
+    assert all(result['actual_date'] == date(2024, 1, 4))
+    assert trader._is_trading_day.call_count >= 2  # Should have checked at least 2 dates
+    
+    # Test case 2: Trading day (should use the provided date)
+    trader._is_trading_day.reset_mock()
+    trader._get_price_data.reset_mock()
+    
+    trading_day = date(2024, 1, 4)  # Already a trading day
+    result = trader._get_price_before(['AAPL', 'MSFT', 'GOOGL'], trading_day)
+    
+    assert len(result) == 3
+    assert all(result['actual_date'] == date(2024, 1, 4))
+    assert trader._is_trading_day.call_count == 1  # Should have checked only the target date
+    assert trader._get_price_data.call_count == 1  # Should have called get_price_data once
+    
+    # Test case 3: Exception when no trading day found
+    
+    with pytest.raises(ValueError, match="Could not find trading day within 5 days"):
+        trader._get_price_before(['AAPL'], date(2024, 2, 5))
+
+
+def test_get_price_momentum(create_trader):
+    """Test that get_price_momentum correctly calculates price momentum metrics."""
+    # Create test price data for different time points
+    current_date = date(2024, 1, 31)
+    date_1m_ago = date(2024, 1, 1)   # 30 days ago
+    date_2m_ago = date(2023, 12, 2)  # 60 days ago
+    date_3m_ago = date(2023, 11, 2)  # 90 days ago
+    
+    # Create a trader with default test data
+    trader = create_trader()
+    
+    # Configure mock_get_price_before to return different prices for different dates
+    def get_price_before_side_effect(symbols, date_param):
+        if date_param == current_date:
+            # Current prices (p0)
+            return pd.DataFrame({
+                'symbol': ['AAPL', 'MSFT', 'GOOGL'],
+                'price': [200.0, 400.0, 3000.0],
+                'actual_date': [current_date] * 3
+            })
+        elif date_param == date_1m_ago:
+            # 1 month ago prices (p1)
+            return pd.DataFrame({
+                'symbol': ['AAPL', 'MSFT', 'GOOGL'],
+                'price': [180.0, 380.0, 2800.0],
+                'actual_date': [date_1m_ago] * 3
+            })
+        elif date_param == date_2m_ago:
+            # 2 months ago prices (p2)
+            return pd.DataFrame({
+                'symbol': ['AAPL', 'MSFT', 'GOOGL'],
+                'price': [170.0, 360.0, 2600.0],
+                'actual_date': [date_2m_ago] * 3
+            })
+        elif date_param == date_3m_ago:
+            # 3 months ago prices (p3)
+            return pd.DataFrame({
+                'symbol': ['AAPL', 'MSFT', 'GOOGL'],
+                'price': [160.0, 340.0, 2400.0],
+                'actual_date': [date_3m_ago] * 3
+            })
+        return pd.DataFrame(columns=['symbol', 'price', 'actual_date'])
+    
+    # Mock the _get_price_before method
+    trader._get_price_before = MagicMock(side_effect=get_price_before_side_effect)
+    
+    # Call the method under test
+    result = trader.get_price_momentum(current_date)
+    
+    # Verify the results
+    assert len(result) == 3  # All 3 symbols should be in the result
+    assert set(result['symbol']) == {'AAPL', 'MSFT', 'GOOGL'}
+    
+    # Check that all expected columns are present
+    expected_columns = {
+        'symbol', 'three_month_return', 'min_monthly_return'
+    }
+    assert expected_columns.issubset(set(result.columns))
+    
+    # Verify the calculations for AAPL
+    aapl_data = result[result['symbol'] == 'AAPL'].iloc[0]
+    
+    # Three month return: (200/160) - 1 = 0.25 (25%)
+    assert round(aapl_data['three_month_return'], 4) == 0.25
+    
+    # Monthly returns: 
+    # p0/p1 - 1 = 200/180 - 1 = 0.111 (11.1%)
+    # p1/p2 - 1 = 180/170 - 1 = 0.059 (5.9%)
+    # p2/p3 - 1 = 170/160 - 1 = 0.063 (6.3%)
+    # Min monthly return should be 0.059 (5.9%)
+    assert round(aapl_data['min_monthly_return'], 4) == 0.0588  # Allow for small floating point differences
+    
+    # No longer need to verify dates as they're not returned
+    
+    # Verify the calculations for MSFT
+    msft_data = result[result['symbol'] == 'MSFT'].iloc[0]
+    
+    # Three month return: (400/340) - 1 = 0.1765 (17.65%)
+    assert round(msft_data['three_month_return'], 4) == round(400/340 - 1, 4)
+    
+    # Monthly returns for MSFT: 
+    # p0/p1 - 1 = 400/380 - 1 = 0.0526 (5.26%)
+    # p1/p2 - 1 = 380/360 - 1 = 0.0556 (5.56%)
+    # p2/p3 - 1 = 360/340 - 1 = 0.0588 (5.88%)
+    # Min monthly return should be 0.0526 (5.26%)
+    assert round(msft_data['min_monthly_return'], 4) == 0.0526
+    
+    # Verify the calculations for GOOGL
+    googl_data = result[result['symbol'] == 'GOOGL'].iloc[0]
+    
+    # Three month return: (3000/2400) - 1 = 0.25 (25%)
+    assert round(googl_data['three_month_return'], 4) == 0.25
+    
+    # Monthly returns for GOOGL: 
+    # p0/p1 - 1 = 3000/2800 - 1 = 0.0714 (7.14%)
+    # p1/p2 - 1 = 2800/2600 - 1 = 0.0769 (7.69%)
+    # p2/p3 - 1 = 2600/2400 - 1 = 0.0833 (8.33%)
+    # Min monthly return should be 0.0714 (7.14%)
+    assert round(googl_data['min_monthly_return'], 4) == 0.0714
+    
+
+
 def test_get_revenue_growth(create_trader):
     """Test that get_revenue_growth correctly calculates YoY growth metrics."""
     # Create test data with 8 quarters (2 years) for each symbol
