@@ -9,7 +9,7 @@ import numpy as np
 
 
 class InterdayTrading:
-    def __init__(self, begin_date: str, end_date: str):
+    def __init__(self, begin_date: str, end_date: str, db_path: str = '/Users/jluan/code/finance/data/fmp_data.db'):
         """
         Initialize InterdayTrading with date range and load valid stocks.
         Args:
@@ -19,13 +19,12 @@ class InterdayTrading:
         # Configure logging
         logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
         self.logger = logging.getLogger('InterdayTrading')
-        
+        self.db_path = db_path
         # Parse date strings
         self.begin_date = datetime.strptime(begin_date, '%Y-%m-%d').date()
         self.end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
         # Price loader for fetching close prices
-        self.price_loader = FMPPriceLoader()
-        self.db_path = '/Users/jluan/code/finance/data/fmp_data.db'
+        self.price_loader = FMPPriceLoader(db_path=db_path)
         # Load valid symbols, sectors, industries
         self.stocks = self._load_valid_stocks()
         # Load fundamentals from financial statements
@@ -61,7 +60,7 @@ class InterdayTrading:
         ds = Dataset(symbols, metrics={
             'free_cash_flow_per_share': 'free_cash_flow_per_share',
             'revenue': 'revenue'
-        })
+        }, db_path=self.db_path)
         fundamentals = ds.get_data()
         fundamentals['date'] = pd.to_datetime(fundamentals['date']).dt.date
         return fundamentals[['symbol', 'date', 'free_cash_flow_per_share', 'revenue']]
@@ -80,7 +79,8 @@ class InterdayTrading:
         price_ds = Dataset(
             symbols,
             metrics={'adjusted_close':'price'},
-            for_date=current_date.strftime('%Y-%m-%d')
+            for_date=current_date.strftime('%Y-%m-%d'),
+            db_path=self.db_path
         )
         price_data = price_ds.get_data()
         price_data['date'] = pd.to_datetime(price_data['date']).dt.date

@@ -25,6 +25,10 @@ venv/
 .venv/
 ENV/
 
+# Test coverage
+.coverage.*
+.coverage
+
 # Database files
 *.db
 *.db-journal
