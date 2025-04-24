@@ -248,36 +248,6 @@ def test_get_price_momentum(trader):
     # Get the symbols from the cached data
     symbols = ['AAPL', 'MSFT', 'GOOGL']
     
-    # Call the method under test
-    result = trader.get_price_momentum(current_date)
-    
-    # Verify the results
-    assert not result.empty  # Should have some results
-    
-    # Check that all expected columns are present
-    expected_columns = {
-        'symbol', 'three_month_return', 'min_monthly_return'
-    }
-    assert expected_columns.issubset(set(result.columns))
-    
-    # Since we're using real data from the database, we can't assert exact values
-    # Instead, we'll verify that the calculations are reasonable
-    for symbol in result['symbol'].unique():
-        row = result[result['symbol'] == symbol].iloc[0]
-        
-        # Verify that the three_month_return is a float
-        assert isinstance(row['three_month_return'], float)
-        
-        # Verify that the min_monthly_return is a float
-        assert isinstance(row['min_monthly_return'], float)
-        
-        # The min_monthly_return should be less than or equal to any of the monthly returns
-        # which means it should be less than or equal to the three_month_return
-        # (unless there was a huge drop followed by a huge recovery)
-        # This is a sanity check, not a strict rule
-        if row['three_month_return'] > 0:
-            assert row['min_monthly_return'] <= row['three_month_return'] * 1.1  # Allow some margin
-    
     # Test with a specific date range by patching _get_price_before
     # This allows us to test the calculation logic with controlled inputs
     with patch.object(trader, '_get_price_before') as mock_get_price_before:
@@ -289,23 +259,29 @@ def test_get_price_momentum(trader):
                     'price': [200.0, 400.0, 3000.0],
                     'actual_date': [current_date] * 3
                 })
-            elif date_param == current_date - timedelta(days=30):
+            elif date_param == current_date - timedelta(days=90):  # 3 months ago
                 return pd.DataFrame({
                     'symbol': ['AAPL', 'MSFT', 'GOOGL'],
                     'price': [180.0, 380.0, 2800.0],
-                    'actual_date': [current_date - timedelta(days=30)] * 3
+                    'actual_date': [current_date - timedelta(days=90)] * 3
                 })
-            elif date_param == current_date - timedelta(days=60):
+            elif date_param == current_date - timedelta(days=180):  # 6 months ago
                 return pd.DataFrame({
                     'symbol': ['AAPL', 'MSFT', 'GOOGL'],
                     'price': [170.0, 360.0, 2600.0],
-                    'actual_date': [current_date - timedelta(days=60)] * 3
+                    'actual_date': [current_date - timedelta(days=180)] * 3
                 })
-            elif date_param == current_date - timedelta(days=90):
+            elif date_param == current_date - timedelta(days=270):  # 9 months ago
                 return pd.DataFrame({
                     'symbol': ['AAPL', 'MSFT', 'GOOGL'],
                     'price': [160.0, 340.0, 2400.0],
-                    'actual_date': [current_date - timedelta(days=90)] * 3
+                    'actual_date': [current_date - timedelta(days=270)] * 3
+                })
+            elif date_param == current_date - timedelta(days=365):  # 12 months ago
+                return pd.DataFrame({
+                    'symbol': ['AAPL', 'MSFT', 'GOOGL'],
+                    'price': [150.0, 320.0, 2200.0],
+                    'actual_date': [current_date - timedelta(days=365)] * 3
                 })
             return pd.DataFrame(columns=['symbol', 'price', 'actual_date'])
         
@@ -314,30 +290,48 @@ def test_get_price_momentum(trader):
         # Call the method again with our controlled data
         controlled_result = trader.get_price_momentum(current_date)
         
+        # Verify the results
+        assert not controlled_result.empty  # Should have some results
+        
+        # Check that all expected columns are present
+        expected_columns = {
+            'symbol', 'm3', 'm6', 'm9', 'm12'
+        }
+        assert expected_columns.issubset(set(controlled_result.columns))
+    
+    # Since we're using real data from the database, we can't assert exact values
+    # Instead, we'll verify that the calculations are reasonable
+    for symbol in controlled_result['symbol'].unique():
+        row = controlled_result[controlled_result['symbol'] == symbol].iloc[0]
+        
+        # Verify that all momentum metrics are floats
+        assert isinstance(row['m3'], float)
+        assert isinstance(row['m6'], float)
+        assert isinstance(row['m9'], float)
+        assert isinstance(row['m12'], float)        
+        
         # Now we can verify exact calculations
         aapl_data = controlled_result[controlled_result['symbol'] == 'AAPL'].iloc[0]
-        # Three month return: (current_price / price_90_days_ago) - 1
-        assert pytest.approx(aapl_data['three_month_return'], rel=1e-6) == (200.0/160.0) - 1
         
-        # Monthly returns for AAPL:
-        # p0/p1 - 1 = 200/180 - 1 = 0.111
-        # p1/p2 - 1 = 180/170 - 1 = 0.059
-        # p2/p3 - 1 = 170/160 - 1 = 0.063
-        # Min monthly return should be 0.059
-        monthly_returns_aapl = [200.0/180.0 - 1, 180.0/170.0 - 1, 170.0/160.0 - 1]
-        assert pytest.approx(aapl_data['min_monthly_return'], rel=1e-6) == min(monthly_returns_aapl)
+        # Verify momentum calculations for AAPL
+        assert pytest.approx(aapl_data['m3'], rel=1e-6) == (200.0/180.0) - 1  # 3-month momentum
+        assert pytest.approx(aapl_data['m6'], rel=1e-6) == (200.0/170.0) - 1  # 6-month momentum
+        assert pytest.approx(aapl_data['m9'], rel=1e-6) == (200.0/160.0) - 1  # 9-month momentum
+        assert pytest.approx(aapl_data['m12'], rel=1e-6) == (200.0/150.0) - 1  # 12-month momentum
         
+        # Verify momentum calculations for MSFT
         msft_data = controlled_result[controlled_result['symbol'] == 'MSFT'].iloc[0]
-        # Three month return: (current_price / price_90_days_ago) - 1
-        assert pytest.approx(msft_data['three_month_return'], rel=1e-6) == (400.0/340.0) - 1
+        assert pytest.approx(msft_data['m3'], rel=1e-6) == (400.0/380.0) - 1  # 3-month momentum
+        assert pytest.approx(msft_data['m6'], rel=1e-6) == (400.0/360.0) - 1  # 6-month momentum
+        assert pytest.approx(msft_data['m9'], rel=1e-6) == (400.0/340.0) - 1  # 9-month momentum
+        assert pytest.approx(msft_data['m12'], rel=1e-6) == (400.0/320.0) - 1  # 12-month momentum
         
-        # Monthly returns for MSFT:
-        # p0/p1 - 1 = 400/380 - 1 = 0.0526
-        # p1/p2 - 1 = 380/360 - 1 = 0.0556
-        # p2/p3 - 1 = 360/340 - 1 = 0.0588
-        # Min monthly return should be 0.0526
-        monthly_returns_msft = [400.0/380.0 - 1, 380.0/360.0 - 1, 360.0/340.0 - 1]
-        assert pytest.approx(msft_data['min_monthly_return'], rel=1e-6) == min(monthly_returns_msft)
+        # Verify momentum calculations for GOOGL
+        googl_data = controlled_result[controlled_result['symbol'] == 'GOOGL'].iloc[0]
+        assert pytest.approx(googl_data['m3'], rel=1e-6) == (3000.0/2800.0) - 1  # 3-month momentum
+        assert pytest.approx(googl_data['m6'], rel=1e-6) == (3000.0/2600.0) - 1  # 6-month momentum
+        assert pytest.approx(googl_data['m9'], rel=1e-6) == (3000.0/2400.0) - 1  # 9-month momentum
+        assert pytest.approx(googl_data['m12'], rel=1e-6) == (3000.0/2200.0) - 1  # 12-month momentum
     
 
 

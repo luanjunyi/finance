@@ -278,13 +278,10 @@ class InterdayTrading:
         Calculate price momentum metrics for stocks.
         
         This method computes price momentum metrics by comparing current price (p0) with:
-        - Price 1 month ago (p1)
-        - Price 2 months ago (p2)
-        - Price 3 months ago (p3)
-        
-        It calculates:
-        - 3-month return: p0/p3 - 1
-        - Minimum monthly return: min(p0/p1 - 1, p1/p2 - 1, p2/p3 - 1)
+        - Price 3 months ago (p1) -> m3
+        - Price 6 months ago (p2) -> m6
+        - Price 9 months ago (p3) -> m9
+        - Price 12 months ago (p4) -> m12
         
         Args:
             current_date: Date to calculate for
@@ -292,46 +289,49 @@ class InterdayTrading:
         Returns:
             DataFrame with columns:
             - symbol: Stock symbol
-            - three_month_return: Price return over 3 months
-            - min_monthly_return: Minimum monthly return over the 3 months
+            - m3: Price momentum over 3 months (p0/p1 - 1)
+            - m6: Price momentum over 6 months (p0/p2 - 1)
+            - m9: Price momentum over 9 months (p0/p3 - 1)
+            - m12: Price momentum over 12 months (p0/p4 - 1)
         """
         symbols = self.stocks['symbol'].tolist()
         self.logger.info(f"Calculating price momentum for {len(symbols)} stocks")
         
-        # Calculate dates for 1, 2, and 3 months ago
-        date_1m_ago = current_date - timedelta(days=30)
-        date_2m_ago = current_date - timedelta(days=60)
+        # Calculate dates for 3, 6, 9, and 12 months ago
         date_3m_ago = current_date - timedelta(days=90)
+        date_6m_ago = current_date - timedelta(days=180)
+        date_9m_ago = current_date - timedelta(days=270)
+        date_12m_ago = current_date - timedelta(days=365)
         
-        # Get price data for current date and 1, 2, 3 months ago using _get_price_before
+        # Get price data for current date and 3, 6, 9, 12 months ago using _get_price_before
         # to ensure we get data even if the dates are not trading days
         p0_data = self._get_price_before(symbols, current_date)
-        p1_data = self._get_price_before(symbols, date_1m_ago)
-        p2_data = self._get_price_before(symbols, date_2m_ago)
-        p3_data = self._get_price_before(symbols, date_3m_ago)
+        p1_data = self._get_price_before(symbols, date_3m_ago)
+        p2_data = self._get_price_before(symbols, date_6m_ago)
+        p3_data = self._get_price_before(symbols, date_9m_ago)
+        p4_data = self._get_price_before(symbols, date_12m_ago)
         
         # Rename price columns to avoid confusion when merging
         p0_data = p0_data.rename(columns={'price': 'p0', 'actual_date': 'date_p0'})
         p1_data = p1_data.rename(columns={'price': 'p1', 'actual_date': 'date_p1'})
         p2_data = p2_data.rename(columns={'price': 'p2', 'actual_date': 'date_p2'})
         p3_data = p3_data.rename(columns={'price': 'p3', 'actual_date': 'date_p3'})
+        p4_data = p4_data.rename(columns={'price': 'p4', 'actual_date': 'date_p4'})
         
         # Merge all price data
         merged_data = p0_data.merge(p1_data, on='symbol', how='inner')
         merged_data = merged_data.merge(p2_data, on='symbol', how='inner')
         merged_data = merged_data.merge(p3_data, on='symbol', how='inner')
+        merged_data = merged_data.merge(p4_data, on='symbol', how='inner')
         
-        # Calculate returns
-        merged_data['return_0_to_1'] = merged_data['p0'] / merged_data['p1'] - 1
-        merged_data['return_1_to_2'] = merged_data['p1'] / merged_data['p2'] - 1
-        merged_data['return_2_to_3'] = merged_data['p2'] / merged_data['p3'] - 1
-        
-        # Calculate 3-month return and minimum monthly return
-        merged_data['three_month_return'] = merged_data['p0'] / merged_data['p3'] - 1
-        merged_data['min_monthly_return'] = merged_data[['return_0_to_1', 'return_1_to_2', 'return_2_to_3']].min(axis=1)
+        # Calculate price momentum metrics
+        merged_data['m3'] = merged_data['p0'] / merged_data['p1'] - 1
+        merged_data['m6'] = merged_data['p0'] / merged_data['p2'] - 1
+        merged_data['m9'] = merged_data['p0'] / merged_data['p3'] - 1
+        merged_data['m12'] = merged_data['p0'] / merged_data['p4'] - 1
         
         # Select only the required columns
-        result_df = merged_data[['symbol', 'three_month_return', 'min_monthly_return']]
+        result_df = merged_data[['symbol', 'm3', 'm6', 'm9', 'm12']]
         
         self.logger.info(f"Calculated price momentum for {len(result_df)} stocks")
         return result_df
