@@ -59,11 +59,12 @@ class InterdayTrading:
         assert len(symbols) > 0, "No symbols provided"
         ds = Dataset(symbols, metrics={
             'free_cash_flow_per_share': 'free_cash_flow_per_share',
-            'revenue': 'revenue'
+            'revenue': 'revenue',
+            'operating_profit_margin': 'operating_margin'
         }, db_path=self.db_path)
         fundamentals = ds.get_data()
         fundamentals['date'] = pd.to_datetime(fundamentals['date']).dt.date
-        return fundamentals[['symbol', 'date', 'free_cash_flow_per_share', 'revenue']]
+        return fundamentals[['symbol', 'date', 'free_cash_flow_per_share', 'revenue', 'operating_margin']]
     
     def _get_price_data(self, symbols: list, current_date: date) -> pd.DataFrame:
         """
@@ -273,6 +274,64 @@ class InterdayTrading:
         
         return growth_df
         
+    def get_profit_margin(self, current_date: date) -> pd.DataFrame:
+        """
+        Calculate operating profit margin metrics for stocks.
+        
+        This method retrieves operating profit margins for different time periods:
+        - Most recent quarter (opm_3m)
+        - 2 quarters ago (opm_6m)
+        - 3 quarters ago (opm_9m)
+        - 4 quarters ago (opm_12m)
+        
+        Args:
+            current_date: Date to calculate for
+            
+        Returns:
+            DataFrame with columns:
+            - symbol: Stock symbol
+            - opm_3m: Operating profit margin from most recent quarter
+            - opm_6m: Operating profit margin from 2 quarters ago
+            - opm_9m: Operating profit margin from 3 quarters ago
+            - opm_12m: Operating profit margin from 4 quarters ago
+        """
+        # Filter fundamentals data for the required window (4 quarters)
+        sorted_window = self._filter_fundamentals(current_date, 400, 4)
+        
+        # Get the list of valid symbols
+        valid_symbols = sorted_window['symbol'].unique().tolist()
+        
+        # Calculate profit margins for each symbol
+        profit_margin_results = []
+        
+        for symbol in valid_symbols:
+            symbol_data = sorted_window[sorted_window['symbol'] == symbol]
+            symbol_data = symbol_data.sort_values('date', ascending=False)
+            
+            # Need at least 4 quarters of data
+            if len(symbol_data) < 4:
+                continue
+                
+            # Get operating margins for the 4 most recent quarters
+            quarters_data = {}
+            
+            for i in range(min(4, len(symbol_data))):
+                quarter_data = symbol_data.iloc[i]
+                quarters_data[f'opm_{(i+1)*3}m'] = quarter_data['operating_margin']
+            
+            # Only include symbols with all 4 quarters of data
+            if len(quarters_data) == 4:
+                quarters_data['symbol'] = symbol
+                profit_margin_results.append(quarters_data)
+        
+        # Convert results to DataFrame
+        profit_margin_df = pd.DataFrame(profit_margin_results)
+        
+        if profit_margin_df.empty:
+            return pd.DataFrame(columns=['symbol', 'opm_3m', 'opm_6m', 'opm_9m', 'opm_12m'])
+        
+        return profit_margin_df
+        
     def get_price_momentum(self, current_date: date) -> pd.DataFrame:
         """
         Calculate price momentum metrics for stocks.
@@ -356,6 +415,7 @@ class InterdayTrading:
             - median_yoy: Median YoY revenue growth over past 4 quarters
             - min_yoy: Minimum YoY revenue growth over past 4 quarters
             - last_yoy: Most recent quarter's YoY revenue growth
+            - opm_3m, opm_6m, opm_9m, opm_12m: Operating profit margins for different time periods
             - date: The date for which features were built
         """
         # Get price data for all stocks on current_date
@@ -375,10 +435,15 @@ class InterdayTrading:
         self.logger.info("Calculating price momentum metrics")
         momentum_df = self.get_price_momentum(date)
         
+        # Calculate profit margin metrics
+        self.logger.info("Calculating profit margin metrics")
+        profit_margin_df = self.get_profit_margin(date)
+        
         # Merge all feature dataframes
         self.logger.info("Merging feature data")
         df = pd.merge(fcf_df, growth_df, on='symbol', how='outer')
         df = pd.merge(df, momentum_df, on='symbol', how='outer')
+        df = pd.merge(df, profit_margin_df, on='symbol', how='outer')
         
         # Add sector and industry information
         self.logger.info("Adding sector and industry information")

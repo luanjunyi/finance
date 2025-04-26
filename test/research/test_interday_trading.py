@@ -1,13 +1,8 @@
 import pytest
 import pandas as pd
-import numpy as np
-from datetime import datetime, date, timedelta
-from unittest.mock import patch, MagicMock
+from datetime import date, timedelta
+from unittest.mock import patch
 from research.interday_trading import InterdayTrading
-import sqlite3
-
-
-
 
 
 @pytest.fixture(scope="session")
@@ -428,3 +423,88 @@ def test_get_revenue_growth(trader):
         assert pytest.approx(googl_row['median_yoy'], 0.01) == (285.0 / 300.0 - 1 + 297.0 / 330.0 - 1 + 306.0 / 360.0 - 1 + 312.0 / 390.0 - 1) / 4
         assert pytest.approx(googl_row['min_yoy'], 0.01) == 312.0 / 390.0 - 1  # -20% is the minimum
         assert pytest.approx(googl_row['last_yoy'], 0.01) == 312.0 / 390.0 - 1  # Last quarter has -20% growth
+
+
+def test_get_profit_margin(trader):
+    """Test that get_profit_margin correctly retrieves operating profit margin metrics."""
+    
+    # Use a date that exists in our test database
+    current_date = date(2024, 1, 1)
+    
+    # Call the method under test
+    result = trader.get_profit_margin(current_date)
+    
+    # Since we're using real data from the database, we should get results
+    # because we've added operating_margin to the test database
+    assert not result.empty
+    
+    # Verify the structure of the results
+    expected_columns = {
+        'symbol', 'opm_3m', 'opm_6m', 'opm_9m', 'opm_12m'
+    }
+    assert expected_columns.issubset(set(result.columns))
+    
+    # Verify that the metrics are reasonable
+    for symbol in result['symbol'].unique():
+        row = result[result['symbol'] == symbol].iloc[0]
+        
+        # Verify that the metrics are floats
+        assert isinstance(row['opm_3m'], float)
+        assert isinstance(row['opm_6m'], float)
+        assert isinstance(row['opm_9m'], float)
+        assert isinstance(row['opm_12m'], float)
+    
+    # Test with controlled data by patching _filter_fundamentals
+    with patch.object(trader, '_filter_fundamentals') as mock_filter_fundamentals:
+        # Create test data with specific operating margins
+        test_data = pd.DataFrame([
+            # AAPL - operating margins for 4 quarters
+            {'symbol': 'AAPL', 'date': date(2023, 10, 1), 'free_cash_flow_per_share': 3.6, 'revenue': 120.0, 'operating_margin': 0.30},
+            {'symbol': 'AAPL', 'date': date(2023, 7, 1), 'free_cash_flow_per_share': 3.45, 'revenue': 115.0, 'operating_margin': 0.29},
+            {'symbol': 'AAPL', 'date': date(2023, 4, 1), 'free_cash_flow_per_share': 3.3, 'revenue': 110.0, 'operating_margin': 0.28},
+            {'symbol': 'AAPL', 'date': date(2023, 1, 1), 'free_cash_flow_per_share': 3.15, 'revenue': 105.0, 'operating_margin': 0.27},
+            
+            # MSFT - operating margins for 4 quarters
+            {'symbol': 'MSFT', 'date': date(2023, 10, 1), 'free_cash_flow_per_share': 2.465, 'revenue': 58.0, 'operating_margin': 0.40},
+            {'symbol': 'MSFT', 'date': date(2023, 7, 1), 'free_cash_flow_per_share': 2.38, 'revenue': 56.0, 'operating_margin': 0.39},
+            {'symbol': 'MSFT', 'date': date(2023, 4, 1), 'free_cash_flow_per_share': 2.295, 'revenue': 54.0, 'operating_margin': 0.38},
+            {'symbol': 'MSFT', 'date': date(2023, 1, 1), 'free_cash_flow_per_share': 2.21, 'revenue': 52.0, 'operating_margin': 0.37},
+            
+            # GOOGL - operating margins for 4 quarters
+            {'symbol': 'GOOGL', 'date': date(2023, 10, 1), 'free_cash_flow_per_share': 3.93, 'revenue': 76.0, 'operating_margin': 0.35},
+            {'symbol': 'GOOGL', 'date': date(2023, 7, 1), 'free_cash_flow_per_share': 3.82, 'revenue': 74.0, 'operating_margin': 0.34},
+            {'symbol': 'GOOGL', 'date': date(2023, 4, 1), 'free_cash_flow_per_share': 3.72, 'revenue': 72.0, 'operating_margin': 0.33},
+            {'symbol': 'GOOGL', 'date': date(2023, 1, 1), 'free_cash_flow_per_share': 3.62, 'revenue': 70.0, 'operating_margin': 0.32},
+        ])
+        
+        # Configure the mock to return our test data
+        mock_filter_fundamentals.return_value = test_data
+        
+        # Call the method with our controlled data
+        controlled_result = trader.get_profit_margin(current_date)
+        
+        # Verify all symbols are included
+        assert set(controlled_result['symbol']) == {'AAPL', 'MSFT', 'GOOGL'}
+        
+        # Verify the operating margins for each symbol
+        aapl_row = controlled_result[controlled_result['symbol'] == 'AAPL'].iloc[0]
+        msft_row = controlled_result[controlled_result['symbol'] == 'MSFT'].iloc[0]
+        googl_row = controlled_result[controlled_result['symbol'] == 'GOOGL'].iloc[0]
+        
+        # AAPL: Check operating margins for each quarter
+        assert pytest.approx(aapl_row['opm_3m'], 0.01) == 0.30  # Most recent quarter
+        assert pytest.approx(aapl_row['opm_6m'], 0.01) == 0.29  # 2 quarters ago
+        assert pytest.approx(aapl_row['opm_9m'], 0.01) == 0.28  # 3 quarters ago
+        assert pytest.approx(aapl_row['opm_12m'], 0.01) == 0.27  # 4 quarters ago
+        
+        # MSFT: Check operating margins for each quarter
+        assert pytest.approx(msft_row['opm_3m'], 0.01) == 0.40  # Most recent quarter
+        assert pytest.approx(msft_row['opm_6m'], 0.01) == 0.39  # 2 quarters ago
+        assert pytest.approx(msft_row['opm_9m'], 0.01) == 0.38  # 3 quarters ago
+        assert pytest.approx(msft_row['opm_12m'], 0.01) == 0.37  # 4 quarters ago
+        
+        # GOOGL: Check operating margins for each quarter
+        assert pytest.approx(googl_row['opm_3m'], 0.01) == 0.35  # Most recent quarter
+        assert pytest.approx(googl_row['opm_6m'], 0.01) == 0.34  # 2 quarters ago
+        assert pytest.approx(googl_row['opm_9m'], 0.01) == 0.33  # 3 quarters ago
+        assert pytest.approx(googl_row['opm_12m'], 0.01) == 0.32  # 4 quarters ago
