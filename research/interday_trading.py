@@ -173,7 +173,7 @@ class InterdayTrading:
             - free_cash_flow: Sum of FCF over 4 quarters
             - min_fcf: Minimum quarterly FCF
             - last_fcf: Most recent quarter's FCF
-            - price: Current stock price
+
             - price_to_fcf: Price divided by sum of FCF
         """
         # Filter fundamentals data for the required window (4 quarters)
@@ -202,7 +202,7 @@ class InterdayTrading:
         df = pd.merge(fcf_metrics, price_data, on='symbol', how='inner')
         df['price_to_fcf'] = df['price'] / df['free_cash_flow']
         
-        return df
+        return df.drop(columns=['price'])
 
     def get_revenue_growth(self, current_date: date) -> pd.DataFrame:
         """
@@ -371,11 +371,11 @@ class InterdayTrading:
         p4_data = self._get_price_before(symbols, date_12m_ago)
         
         # Rename price columns to avoid confusion when merging
-        p0_data = p0_data.rename(columns={'price': 'p0', 'actual_date': 'date_p0'})
-        p1_data = p1_data.rename(columns={'price': 'p1', 'actual_date': 'date_p1'})
-        p2_data = p2_data.rename(columns={'price': 'p2', 'actual_date': 'date_p2'})
-        p3_data = p3_data.rename(columns={'price': 'p3', 'actual_date': 'date_p3'})
-        p4_data = p4_data.rename(columns={'price': 'p4', 'actual_date': 'date_p4'})
+        p0_data = p0_data.rename(columns={'price': 'p0', 'actual_date': 'date_p0'}).set_index('symbol')
+        p1_data = p1_data.rename(columns={'price': 'p1', 'actual_date': 'date_p1'}).set_index('symbol')
+        p2_data = p2_data.rename(columns={'price': 'p2', 'actual_date': 'date_p2'}).set_index('symbol')
+        p3_data = p3_data.rename(columns={'price': 'p3', 'actual_date': 'date_p3'}).set_index('symbol')
+        p4_data = p4_data.rename(columns={'price': 'p4', 'actual_date': 'date_p4'}).set_index('symbol')
         
         # Merge all price data
         merged_data = p0_data.merge(p1_data, on='symbol', how='inner')
@@ -390,12 +390,12 @@ class InterdayTrading:
         merged_data['m12'] = merged_data['p0'] / merged_data['p4'] - 1
         
         # Select only the required columns
-        result_df = merged_data[['symbol', 'm3', 'm6', 'm9', 'm12']]
+        result_df = merged_data.reset_index()[['symbol', 'm3', 'm6', 'm9', 'm12']]
         
         self.logger.info(f"Calculated price momentum for {len(result_df)} stocks")
         return result_df
 
-    def build_features_for_date(self, date: date) -> pd.DataFrame:
+    def build_features_for_date(self, date: date, skip_signals: set = set()) -> pd.DataFrame:
         """
         Build features for a specific date, including price-to-FCF ratios and sector/industry information.
         
@@ -420,30 +420,48 @@ class InterdayTrading:
         """
         # Get price data for all stocks on current_date
         self.logger.info(f"Fetching price data for {len(self.stocks)} stocks on {date}")
-        price_data = self._get_price_data(self.stocks['symbol'].tolist(), date)
+        price_data = self._get_price_data(self.stocks['symbol'].tolist(), date).set_index('symbol')
         self.logger.info(f"Retrieved prices for {len(price_data)} stocks")
         
-        # Combine free cash flow and price into price_to_fcf
-        self.logger.info("Calculating price-to-FCF ratios")
-        fcf_df = self.get_price_to_fcf(price_data, date)
+        if 'price_to_fcf' not in skip_signals:
+            # Combine free cash flow and price into price_to_fcf
+            self.logger.info("Calculating price-to-FCF ratios")
+            fcf_df = self.get_price_to_fcf(price_data, date).set_index('symbol')
+        else:
+            fcf_df = pd.DataFrame()
         
         # Calculate revenue growth metrics
-        self.logger.info("Calculating revenue growth metrics")
-        growth_df = self.get_revenue_growth(date)
+        if 'revenue_growth' not in skip_signals:
+            self.logger.info("Calculating revenue growth metrics")
+            growth_df = self.get_revenue_growth(date).set_index('symbol')
+        else:
+            growth_df = pd.DataFrame()
         
         # Calculate price momentum metrics
-        self.logger.info("Calculating price momentum metrics")
-        momentum_df = self.get_price_momentum(date)
+        if 'momentum' not in skip_signals:
+            self.logger.info("Calculating price momentum metrics")
+            momentum_df = self.get_price_momentum(date).set_index('symbol')
+        else:
+            momentum_df = pd.DataFrame()
         
         # Calculate profit margin metrics
-        self.logger.info("Calculating profit margin metrics")
-        profit_margin_df = self.get_profit_margin(date)
+        if 'operation_margin' not in skip_signals:
+            self.logger.info("Calculating profit margin metrics")
+            profit_margin_df = self.get_profit_margin(date).set_index('symbol')
+        else:
+            profit_margin_df = pd.DataFrame()
         
         # Merge all feature dataframes
         self.logger.info("Merging feature data")
-        df = pd.merge(fcf_df, growth_df, on='symbol', how='outer')
-        df = pd.merge(df, momentum_df, on='symbol', how='outer')
-        df = pd.merge(df, profit_margin_df, on='symbol', how='outer')
+        df = price_data
+        if not fcf_df.empty:
+            df = pd.merge(df, fcf_df, on='symbol', how='outer')
+        if not growth_df.empty:
+            df = pd.merge(df, growth_df, on='symbol', how='outer')
+        if not momentum_df.empty:
+            df = pd.merge(df, momentum_df, on='symbol', how='outer')
+        if not profit_margin_df.empty:
+            df = pd.merge(df, profit_margin_df, on='symbol', how='outer')
         
         # Add sector and industry information
         self.logger.info("Adding sector and industry information")

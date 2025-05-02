@@ -266,6 +266,33 @@ class FMPPriceLoader:
 
         return float(result['adj_price'])
 
+    def get_eps(self, symbol, date):
+        """Get the EPS for a given stock on a specific date.
+
+        Args:
+            symbol (str): Stock symbol
+            date (str): Date to get EPS for in YYYY-MM-DD format
+
+        Returns:
+            float: EPS for the specified symbol and date
+
+        Raises:
+            ValueError: If no EPS data found for the specified symbol and date
+        """
+        self.cursor.execute("""
+            SELECT date, net_income_per_share as eps
+            FROM metrics
+            WHERE symbol = ? AND date <= ?
+            ORDER BY date DESC
+            LIMIT 1
+        """, (symbol, date))
+
+        result = self.cursor.fetchone()
+        if not result:
+            raise ValueError(
+                f"Can't find EPS for {symbol} on {date}")
+        return result['date'], float(result['eps'])
+
     def get_last_available_price(self, symbol, start_date, price_type='close', max_window_days=None):
         """Get the last available **adjusted** price before or on the start date.
 
