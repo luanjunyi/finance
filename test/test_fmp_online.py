@@ -104,6 +104,21 @@ def test_get_pe_ratio_insufficient_data(mock_fmp_online):
     with pytest.raises(ValueError, match="AAPL has only 1 EPS data points before 2024-01-01"):
         fmp.get_pe_ratio('AAPL', '2024-01-01')
 
+def test_get_pe_ratio_data_too_old(mock_fmp_online):
+    """Test the get_pe_ratio method with data too old."""
+    fmp, mock_api = mock_fmp_online
+    
+    # Setup mock response with data too old
+    mock_ratios = [
+        {"date": "2022-12-31", "netIncomePerShare": 2.5},
+        {"date": "2022-09-30", "netIncomePerShare": 2.3}
+    ]
+    mock_api.get_ratios.return_value = mock_ratios
+    
+    # Call the method and expect an exception
+    with pytest.raises(ValueError, match="AAPL has only 0 EPS data points before 2025-01-01"):
+        fmp.get_pe_ratio('AAPL', '2025-01-01')
+
 
 def test_get_close_price(mock_fmp_online):
     """Test the get_close_price method."""

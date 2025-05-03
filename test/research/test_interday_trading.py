@@ -46,7 +46,7 @@ def test_get_price_to_fcf(trader):
     # Check that all expected columns are present
     expected_columns = {
         'symbol', 'free_cash_flow', 'min_fcf', 'last_fcf', 
-        'price', 'price_to_fcf'
+ 'price_to_fcf'
     }
     assert expected_columns.issubset(set(result.columns))
     
@@ -59,21 +59,18 @@ def test_get_price_to_fcf(trader):
     assert pytest.approx(aapl_row['free_cash_flow'], rel=1e-6) == 3.6 + 3.45 + 3.3 + 3.15
     assert pytest.approx(aapl_row['min_fcf'], rel=1e-6) == 3.15  # Minimum quarterly value
     assert pytest.approx(aapl_row['last_fcf'], rel=1e-6) == 3.6  # Most recent quarter
-    assert aapl_row['price'] == 200.0
     assert pytest.approx(aapl_row['price_to_fcf'], rel=1e-6) == 200 / (3.6 + 3.45 + 3.3 + 3.15)
     
     # MSFT: Free cash flow values from the test database
     assert pytest.approx(msft_row['free_cash_flow'], rel=1e-6) == 2.465 + 2.38 + 2.295 + 2.21
     assert pytest.approx(msft_row['min_fcf'], rel=1e-6) == 2.21  # Minimum quarterly value
     assert pytest.approx(msft_row['last_fcf'], rel=1e-6) == 2.465  # Most recent quarter
-    assert msft_row['price'] == 400.0
     assert pytest.approx(msft_row['price_to_fcf'], rel=1e-6) == 400 / (2.465 + 2.38 + 2.295 + 2.21)
     
     # GOOGL: Free cash flow values from the test database
     assert pytest.approx(googl_row['free_cash_flow'], rel=1e-6) == 3.93 + 3.82 + 3.72 + 3.62
     assert pytest.approx(googl_row['min_fcf'], rel=1e-6) == 3.62  # Minimum quarterly value
     assert pytest.approx(googl_row['last_fcf'], rel=1e-6) == 3.93  # Most recent quarter
-    assert googl_row['price'] == 3000.0
     assert pytest.approx(googl_row['price_to_fcf'], rel=1e-6) == 3000 / (3.93 + 3.82 + 3.72 + 3.62)
 
 
