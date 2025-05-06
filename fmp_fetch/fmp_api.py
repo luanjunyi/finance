@@ -4,6 +4,7 @@ import logging
 import requests
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
+from functools import cache
 from utils.logging_config import setup_logging as setup_global_logging
 
 
@@ -19,7 +20,7 @@ class FMPAPI:
 
         self.base_url = "https://financialmodelingprep.com/stable"
         self.last_request_time = 0
-        self.rate_limit_delay = 0.25  # 4 requests per second
+        self.rate_limit_delay = 0.2  # 5 requests per second
 
         # Setup logging with filename and line numbers
         self.setup_logging()
@@ -81,6 +82,7 @@ class FMPAPI:
 
 
     # Price fetching functions
+    @cache
     def get_prices(self, symbol: str, from_date: str, to_date: str):
         """
         Get historical price data for a symbol between two dates
@@ -104,6 +106,7 @@ class FMPAPI:
 
         return prices
 
+    @cache
     def get_ratios(self, symbol: str, period: str = 'quarter', limit: int = 120):
         ratios = self.make_request(
             'ratios',
@@ -114,6 +117,54 @@ class FMPAPI:
             }
         )
         return ratios
+
+    @cache
+    def get_income_statement(self, symbol: str, period: str = 'quarter', limit: int = 120):
+        income_statement = self.make_request(
+            'income-statement',
+            {
+                'symbol': symbol,
+                'period': period,
+                'limit': limit
+            }
+        )
+        return income_statement
+
+    @cache
+    def get_cashflow_statement(self, symbol: str, period: str = 'quarter', limit: int = 120):
+        cashflow_statement = self.make_request(
+            'cash-flow-statement',
+            {
+                'symbol': symbol,
+                'period': period,
+                'limit': limit
+            }
+        )
+        return cashflow_statement
+        
+    @cache
+    def get_balance_sheet(self, symbol: str, period: str = 'quarter', limit: int = 120):
+        balance_sheet = self.make_request(
+            'balance-sheet-statement',
+            {
+                'symbol': symbol,
+                'period': period,
+                'limit': limit
+            }
+        )
+        return balance_sheet
+
+    @cache
+    def get_balance_sheet(self, symbol: str, period: str = 'quarter', limit: int = 120):
+        balance_sheet = self.make_request(
+            'balance-sheet-statement',
+            {
+                'symbol': symbol,
+                'period': period,
+                'limit': limit
+            }
+        )
+        return balance_sheet
     
 
 # Example usage

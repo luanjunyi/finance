@@ -134,3 +134,55 @@ def test_get_close_price(mock_fmp_online):
     
     # Verify the result
     assert result == 102.0
+
+
+def test_get_close_prices_during(mock_fmp_online):
+    """Test the get_close_prices_during method."""
+    fmp, mock_api = mock_fmp_online
+    
+    # Setup mock price data for multiple symbols and dates
+    mock_prices_aapl = [
+        {"symbol": "AAPL", "date": "2024-01-03", "adjOpen": 100.0, "adjHigh": 105.0, "adjLow": 99.0, "adjClose": 102.0, "volume": 1000000},
+        {"symbol": "AAPL", "date": "2024-01-02", "adjOpen": 98.0, "adjHigh": 103.0, "adjLow": 97.0, "adjClose": 101.0, "volume": 900000},
+        {"symbol": "AAPL", "date": "2024-01-01", "adjOpen": 95.0, "adjHigh": 100.0, "adjLow": 94.0, "adjClose": 99.0, "volume": 800000}
+    ]
+    
+    mock_prices_msft = [
+        {"symbol": "MSFT", "date": "2024-01-03", "adjOpen": 200.0, "adjHigh": 205.0, "adjLow": 199.0, "adjClose": 202.0, "volume": 500000},
+        {"symbol": "MSFT", "date": "2024-01-02", "adjOpen": 198.0, "adjHigh": 203.0, "adjLow": 197.0, "adjClose": 201.0, "volume": 450000},
+        {"symbol": "MSFT", "date": "2024-01-01", "adjOpen": 195.0, "adjHigh": 200.0, "adjLow": 194.0, "adjClose": 199.0, "volume": 400000}
+    ]
+    
+    # Configure mock to return different data for different symbols
+    def mock_get_prices(symbol, start_date, end_date):
+        if symbol == 'AAPL':
+            return mock_prices_aapl
+        elif symbol == 'MSFT':
+            return mock_prices_msft
+        return []
+    
+    mock_api.get_prices.side_effect = mock_get_prices
+    
+    # Call the method
+    result = fmp.get_close_prices_during(['AAPL', 'MSFT'], '2024-01-01', '2024-01-03')
+    
+    # Verify the API calls were made correctly
+    assert mock_api.get_prices.call_count == 2
+    mock_api.get_prices.assert_any_call('AAPL', '2024-01-01', '2024-01-03')
+    mock_api.get_prices.assert_any_call('MSFT', '2024-01-01', '2024-01-03')
+    
+    # Verify the result is a DataFrame with the expected structure
+    assert isinstance(result, pd.DataFrame)
+    assert set(result.columns) == {'symbol', 'date', 'close_price'}
+    
+    # Verify the DataFrame contains the expected data
+    assert len(result) == 6  # 3 days * 2 symbols
+    
+    # Check that the data is sorted by symbol and date
+    assert result.iloc[0]['symbol'] == 'AAPL'
+    assert result.iloc[0]['date'] == pd.Timestamp('2024-01-01')
+    assert result.iloc[0]['close_price'] == 99.0
+    
+    assert result.iloc[3]['symbol'] == 'MSFT'
+    assert result.iloc[3]['date'] == pd.Timestamp('2024-01-01')
+    assert result.iloc[3]['close_price'] == 199.0

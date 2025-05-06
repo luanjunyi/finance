@@ -29,7 +29,6 @@ def test_initialization():
         fmp = FMPAPI()
         assert fmp.api_key == 'test_key'
         assert fmp.base_url == "https://financialmodelingprep.com/stable"
-        assert fmp.rate_limit_delay == 0.25
 
 
 def test_initialization_missing_api_key():

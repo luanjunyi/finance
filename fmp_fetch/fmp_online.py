@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
 from utils.logging_config import setup_logging as setup_global_logging
 from .fmp_api import FMPAPI
+from tqdm import tqdm
 
 class FMPOnline:
     """
@@ -93,6 +94,34 @@ class FMPOnline:
         price_to_fcf = price / fcf_1y
         return price_to_fcf
 
+    def get_close_prices_during(self, symbols: List[str], start_date: str, end_date: str):
+        """Get close prices for multiple symbols during a date range.
+        
+        Args:
+            symbols (List[str]): List of stock symbols.
+            start_date (str): Start date in format YYYY-MM-DD.
+            end_date (str): End date in format YYYY-MM-DD.
+        
+        Returns:
+            pd.DataFrame: DataFrame with columns: symbol, date, close_price.
+        """
+        self.logger.info(f"Fetching close prices for {len(symbols)} symbols from {start_date} to {end_date}")
+        
+        all_data = []
+        for symbol in tqdm(symbols):
+            prices = self.api.get_prices(symbol, start_date, end_date)
+            for price in prices:
+                all_data.append({
+                        'symbol': price['symbol'],
+                        'date': price['date'],
+                        'close_price': price['adjClose']
+                    })
+        
+        df = pd.DataFrame(all_data)
+        df['date'] = pd.to_datetime(df['date'])
+        df = df.sort_values(['symbol', 'date'])
+        return df
+        
     
 
 # Example usage
