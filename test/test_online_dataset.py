@@ -198,17 +198,20 @@ def test_fetch_financial_statements(mock_dataset):
 
 def test_fetch_price_data(mock_dataset):
     """Test the _fetch_price_data method."""
+    import numpy as np
     dataset, mock_api = mock_dataset
     
-    # Setup mock price data
+    # Setup mock price data with incomplete date coverage
     mock_prices_aapl = [
         {'date': '2024-01-01', 'adjClose': 190.0, 'symbol': 'AAPL'},
-        {'date': '2024-01-02', 'adjClose': 192.0, 'symbol': 'AAPL'}
+        # Missing 2024-01-02
+        {'date': '2024-01-03', 'adjClose': 195.0, 'symbol': 'AAPL'}
     ]
     
     mock_prices_msft = [
-        {'date': '2024-01-01', 'adjClose': 380.0, 'symbol': 'MSFT'},
-        {'date': '2024-01-02', 'adjClose': 385.0, 'symbol': 'MSFT'}
+        # Missing 2024-01-01
+        {'date': '2024-01-02', 'adjClose': 385.0, 'symbol': 'MSFT'},
+        {'date': '2024-01-03', 'adjClose': 390.0, 'symbol': 'MSFT'}
     ]
     
     # Configure the mock to return different data for each symbol
@@ -226,7 +229,11 @@ def test_fetch_price_data(mock_dataset):
     
     # Test the core logic - verify that the price data is correctly processed
     assert not result.empty
-    assert len(result) == 4  # 2 dates × 2 symbols
+    
+    # We should have entries for all dates in the range (Jan 1-31) for both symbols
+    expected_date_count = 31  # Days in January
+    expected_total_entries = expected_date_count * 2  # 2 symbols
+    assert len(result) == expected_total_entries
     
     # Verify the structure of the result
     assert 'symbol' in result.index.names
@@ -239,9 +246,20 @@ def test_fetch_price_data(mock_dataset):
     # Verify specific values to ensure correct data transformation
     # Since date is no longer in the index, we need to filter by the date column
     assert aapl_data[aapl_data['date'] == pd.Timestamp('2024-01-01')]['close_price'].values[0] == 190.0
-    assert aapl_data[aapl_data['date'] == pd.Timestamp('2024-01-02')]['close_price'].values[0] == 192.0
-    assert msft_data[msft_data['date'] == pd.Timestamp('2024-01-01')]['close_price'].values[0] == 380.0
+    # 2024-01-02 should use the previous day's price (190.0) for AAPL
+    assert aapl_data[aapl_data['date'] == pd.Timestamp('2024-01-02')]['close_price'].values[0] == 190.0
+    assert aapl_data[aapl_data['date'] == pd.Timestamp('2024-01-03')]['close_price'].values[0] == 195.0
+    
+    # 2024-01-01 should be np.nan for MSFT since there's no previous price
+    assert np.isnan(msft_data[msft_data['date'] == pd.Timestamp('2024-01-01')]['close_price'].values[0])
     assert msft_data[msft_data['date'] == pd.Timestamp('2024-01-02')]['close_price'].values[0] == 385.0
+    assert msft_data[msft_data['date'] == pd.Timestamp('2024-01-03')]['close_price'].values[0] == 390.0
+    
+    # Verify that all dates in the range have entries
+    date_range = pd.date_range(start=dataset.start_date, end=dataset.end_date)
+    for date in date_range:
+        assert not aapl_data[aapl_data['date'] == date].empty, f"Missing date {date} for AAPL"
+        assert not msft_data[msft_data['date'] == date].empty, f"Missing date {date} for MSFT"
 
 
 def test_get_latest_values_for_dates(mock_dataset):

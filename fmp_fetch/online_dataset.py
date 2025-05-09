@@ -211,24 +211,53 @@ class Dataset:
         """Fetch price data for all symbols.
         
         Returns:
-            pd.DataFrame: DataFrame with price data
+            pd.DataFrame: DataFrame with price data. Missing dates are filled with
+            the previous day's close price, or np.nan if no previous price is available.
         """
+        import numpy as np
         self.logger.info(f"Fetching price data for {len(self.symbols)} symbols from {self.start_date} to {self.end_date}")
+        
+        # Create a date range for the specified period
+        date_range = pd.date_range(start=self.start_date, end=self.end_date)
         
         all_data = []
         for symbol in tqdm(self.symbols):
             prices = self.api.get_prices(symbol, self.start_date, self.end_date)
             
+            # Create a set of dates that are already in the API response
+            existing_dates = set()
+            price_by_date = {}
+            
             for price in prices:
+                date_str = price['date']
+                existing_dates.add(date_str)
+                price_by_date[date_str] = price['adjClose']
                 all_data.append({
                     'symbol': symbol,
-                    'date': price['date'],
+                    'date': date_str,
                     'close_price': price['adjClose']
                 })
+            
+            # Add entries for missing dates with previous day's price or np.nan
+            previous_price = None
+            for date in date_range:
+                date_str = date.strftime('%Y-%m-%d')
+                if date_str not in existing_dates:
+                    # If we have a previous price, use it; otherwise use np.nan
+                    fill_price = previous_price if previous_price is not None else np.nan
+                    all_data.append({
+                        'symbol': symbol,
+                        'date': date_str,
+                        'close_price': fill_price
+                    })
+                else:
+                    # Update previous_price for the next iteration
+                    previous_price = price_by_date[date_str]
         
         # Convert to DataFrame
         df = pd.DataFrame(all_data)
         df['date'] = pd.to_datetime(df['date'])
+        df.sort_values(['symbol', 'date'], inplace=True)
         
         return df.set_index('symbol')
     

@@ -121,7 +121,14 @@ class FMPOnline:
         df['date'] = pd.to_datetime(df['date'])
         df = df.sort_values(['symbol', 'date'])
         return df
-        
+
+    def get_index_price(self, symbol: str, date: str):
+        prices = self.api.index_prices(symbol, date, date)
+        if not prices:
+            raise ValueError(f"Can't find price for {symbol} on {date}")
+        assert prices[0]['date'] == date
+        assert prices[0]['symbol'] == symbol
+        return prices[0]['price']
     
 
 # Example usage

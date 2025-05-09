@@ -66,7 +66,7 @@ class FMPAPI:
                     return response.json()
                 else:
                     error_msg = f"API request failed: {response.status_code} - {response.text}"
-                    logging.error(f"URL: {url} {params} - {error_msg}")
+                    logging.warning(f"URL: {url} {params} - {error_msg}")
 
                 if attempt < 2:  # Don't sleep on last attempt
                     time.sleep(5)
@@ -165,6 +165,17 @@ class FMPAPI:
             }
         )
         return balance_sheet
+
+    @cache
+    def index_prices(self, symbol: str, from_date: str, to_date: str):
+        return self.make_request(
+            'historical-price-eod/light',
+            {
+                'symbol': symbol,
+                'from': from_date,
+                'to': to_date
+            }
+        )
     
 
 # Example usage
