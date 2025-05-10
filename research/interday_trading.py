@@ -434,7 +434,7 @@ class InterdayTrading:
         self.logger.info(f"Calculated price momentum for {len(result_df)} stocks")
         return result_df
 
-    def build_features_for_date(self, date: date, skip_signals: set = set()) -> pd.DataFrame:
+    def build_features_for_date(self, date: date, skip_signals: set = set(), use_return_after_days: int = -1) -> pd.DataFrame:
         """
         Build features for a specific date, including price-to-FCF ratios and sector/industry information.
         
@@ -455,6 +455,9 @@ class InterdayTrading:
             - min_yoy: Minimum YoY revenue growth over past 4 quarters
             - last_yoy: Most recent quarter's YoY revenue growth
             - opm_3m, opm_6m, opm_9m, opm_12m: Operating profit margins for different time periods
+            - price_to_ncav: Price to NCAV (Net Current Asset Value) ratio
+            - return_date: Date to calculate the return (optional)
+            - return_day_price: Price on return_date (optional)
             - date: The date for which features were built
         """
         # Get price data for all stocks on current_date
@@ -496,6 +499,19 @@ class InterdayTrading:
             ncav_df = self.get_price_to_ncav(price_data, date).set_index('symbol')
         else:
             ncav_df = pd.DataFrame()
+
+        if use_return_after_days > 1:
+            return_date = date + timedelta(days=use_return_after_days)
+            while not self._is_trading_day(return_date):
+                self.logger.warning(f"Return date {return_date} is not a trading day, trying next day")
+                return_date += timedelta(days=1)
+            
+            self.logger.info(f"Calculating return after {use_return_after_days} days: from {date} to {return_date}")
+            return_after_days_df = self._get_price_data(self.stocks['symbol'].tolist(), return_date)
+            return_after_days_df['return_date'] = return_date.strftime('%Y-%m-%d')
+            return_after_days_df.rename(columns={'price': 'return_day_price'}, inplace=True)
+        else:
+            return_after_days_df = pd.DataFrame()
         
         # Merge all feature dataframes
         self.logger.info("Merging feature data")
@@ -510,6 +526,8 @@ class InterdayTrading:
             df = pd.merge(df, profit_margin_df, on='symbol', how='outer')
         if not ncav_df.empty:
             df = pd.merge(df, ncav_df, on='symbol', how='outer')
+        if not return_after_days_df.empty:
+            df = pd.merge(df, return_after_days_df, on='symbol', how='inner')
         
         # Add sector and industry information
         self.logger.info("Adding sector and industry information")
