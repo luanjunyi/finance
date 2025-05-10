@@ -58,13 +58,16 @@ class InterdayTrading:
         """Load fundamentals from financial statements"""
         assert len(symbols) > 0, "No symbols provided"
         ds = Dataset(symbols, metrics={
-            'free_cash_flow_per_share': 'free_cash_flow_per_share',
-            'revenue': 'revenue',
-            'operating_profit_margin': 'operating_margin'
+            'free_cash_flow_per_share': '',
+            'revenue': '',
+            'operating_profit_margin': 'operating_margin',
+            'total_current_assets': '',
+            'total_debt': '',
+            'weighted_average_shares_outstanding_diluted': 'num_shares',
         }, db_path=self.db_path)
         fundamentals = ds.get_data()
         fundamentals['date'] = pd.to_datetime(fundamentals['date']).dt.date
-        return fundamentals[['symbol', 'date', 'free_cash_flow_per_share', 'revenue', 'operating_margin']]
+        return fundamentals[['symbol', 'date', 'free_cash_flow_per_share', 'revenue', 'operating_margin', 'total_current_assets', 'total_debt', 'num_shares']]
     
     def _get_price_data(self, symbols: list, current_date: date) -> pd.DataFrame:
         """
@@ -332,6 +335,42 @@ class InterdayTrading:
         
         return profit_margin_df
         
+    def get_price_to_ncav(self, price_data: pd.DataFrame, current_date: date) -> pd.DataFrame:
+        """
+        Calculate price-to-NCAV (Net Current Asset Value) ratio for stocks.
+        
+        NCAV = total_current_assets - total_debt
+        price_to_ncav = market_cap / NCAV = (num_shares * close_price) / (total_current_assets - total_debt)
+        
+        Args:
+            price_data: DataFrame with symbol and price columns
+            current_date: Date to calculate for
+            
+        Returns:
+            DataFrame with columns:
+            - symbol: Stock symbol
+            - ncav: Net Current Asset Value (total_current_assets - total_debt)
+            - price_to_ncav: Price-to-NCAV ratio
+        """
+        # Filter fundamentals data for the required window
+        sorted_window = self._filter_fundamentals(current_date, 400, 1)
+        
+        # Take the most recent quarter for each symbol
+        latest = sorted_window.groupby('symbol').first().reset_index()
+        
+        # Calculate NCAV and price-to-NCAV
+        ncav_df = latest[['symbol', 'total_current_assets', 'total_debt', 'num_shares']].copy()
+        ncav_df['ncav'] = ncav_df['total_current_assets'] - ncav_df['total_debt']
+        
+        # Merge with price data
+        df = pd.merge(ncav_df, price_data, on='symbol', how='inner')
+        
+        # Calculate price-to-NCAV ratio
+        df['price_to_ncav'] = (df['num_shares'] * df['price']) / df['ncav']
+        
+        # Return only the required columns
+        return df[['symbol', 'ncav', 'price_to_ncav']]
+    
     def get_price_momentum(self, current_date: date) -> pd.DataFrame:
         """
         Calculate price momentum metrics for stocks.
@@ -450,6 +489,13 @@ class InterdayTrading:
             profit_margin_df = self.get_profit_margin(date).set_index('symbol')
         else:
             profit_margin_df = pd.DataFrame()
+            
+        # Calculate price-to-NCAV ratio
+        if 'price_to_ncav' not in skip_signals:
+            self.logger.info("Calculating price-to-NCAV ratios")
+            ncav_df = self.get_price_to_ncav(price_data, date).set_index('symbol')
+        else:
+            ncav_df = pd.DataFrame()
         
         # Merge all feature dataframes
         self.logger.info("Merging feature data")
@@ -462,6 +508,8 @@ class InterdayTrading:
             df = pd.merge(df, momentum_df, on='symbol', how='outer')
         if not profit_margin_df.empty:
             df = pd.merge(df, profit_margin_df, on='symbol', how='outer')
+        if not ncav_df.empty:
+            df = pd.merge(df, ncav_df, on='symbol', how='outer')
         
         # Add sector and industry information
         self.logger.info("Adding sector and industry information")

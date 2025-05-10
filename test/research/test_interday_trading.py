@@ -422,6 +422,48 @@ def test_get_revenue_growth(trader):
         assert pytest.approx(googl_row['last_yoy'], 0.01) == 312.0 / 390.0 - 1  # Last quarter has -20% growth
 
 
+def test_get_price_to_ncav(trader):
+    """Test that get_price_to_ncav correctly calculates NCAV and price-to-NCAV ratio."""
+    
+    # Define test price data
+    price_data = pd.DataFrame({
+        'symbol': ['AAPL', 'MSFT', 'GOOGL'],
+        'date': [date(2024, 1, 1)] * 3,
+        'price': [200.0, 400.0, 3000.0]
+    })
+    
+    # Call the method under test
+    result = trader.get_price_to_ncav(price_data, date(2024, 1, 1))
+    
+    # Verify the results
+    assert len(result) == 3  # All 3 symbols should be in the result
+    assert set(result['symbol']) == {'AAPL', 'MSFT', 'GOOGL'}
+    
+    # Check that all expected columns are present
+    expected_columns = {'symbol', 'ncav', 'price_to_ncav'}
+    assert expected_columns.issubset(set(result.columns))
+    
+    # Check the values for each symbol
+    aapl_row = result[result['symbol'] == 'AAPL'].iloc[0]
+    msft_row = result[result['symbol'] == 'MSFT'].iloc[0]
+    googl_row = result[result['symbol'] == 'GOOGL'].iloc[0]
+    
+    # AAPL: NCAV = total_current_assets - total_debt = 100 - 50 = 50
+    # price_to_ncav = (num_shares * price) / ncav = (10 * 200) / 50 = 40
+    assert pytest.approx(aapl_row['ncav']) == 50
+    assert pytest.approx(aapl_row['price_to_ncav']) == (10 * 200) / 50
+    
+    # MSFT: NCAV = total_current_assets - total_debt = 60 - 30 = 30
+    # price_to_ncav = (num_shares * price) / ncav = (8 * 400) / 30 = 106.67
+    assert pytest.approx(msft_row['ncav']) == 30
+    assert pytest.approx(msft_row['price_to_ncav']) == (8 * 400) / 30
+    
+    # GOOGL: NCAV = total_current_assets - total_debt = 150 - 30 = 120
+    # price_to_ncav = (num_shares * price) / ncav = (6 * 3000) / 120 = 150
+    assert pytest.approx(googl_row['ncav']) == 120
+    assert pytest.approx(googl_row['price_to_ncav']) == (6 * 3000) / 120
+
+
 def test_get_profit_margin(trader):
     """Test that get_profit_margin correctly retrieves operating profit margin metrics."""
     
