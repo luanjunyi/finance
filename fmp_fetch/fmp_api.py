@@ -176,6 +176,11 @@ class FMPAPI:
                 'to': to_date
             }
         )
+
+    @cache
+    def spx_constituents(self):
+        spx = self.make_request('sp500-constituent')
+        return [x['symbol'] for x in spx]
     
 
 # Example usage

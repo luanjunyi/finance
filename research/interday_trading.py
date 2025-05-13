@@ -78,7 +78,7 @@ class InterdayTrading:
             current_date: Date to get prices for
             
         Returns:
-            DataFrame with symbol and price columns
+            DataFrame with symbol, price, and market_cap columns
         """
         price_ds = Dataset(
             symbols,
@@ -88,7 +88,23 @@ class InterdayTrading:
         )
         price_data = price_ds.get_data()
         price_data['date'] = pd.to_datetime(price_data['date']).dt.date
-        return price_data[price_data['date'] == current_date][['symbol','price']]
+        price_data = price_data[price_data['date'] == current_date][['symbol','price']]
+        
+        # Use _filter_fundamentals to get the most recent data for each symbol
+        # Use a large window to ensure we capture data for all symbols
+        # and min_records=1 to include symbols with at least one record
+        filtered_data = self._filter_fundamentals(current_date, 100, 1)
+        
+        # Take the first row for each symbol (most recent)
+        latest_shares = filtered_data.groupby('symbol').first().reset_index()[['symbol', 'num_shares']]
+        
+        # Merge price data with shares data
+        result = pd.merge(price_data, latest_shares, on='symbol', how='inner')
+        
+        # Calculate market cap as price * num_shares
+        result['market_cap'] = result['price'] * result['num_shares']
+        
+        return result
         
     def _get_price_before(self, symbols: list, target_date: date) -> pd.DataFrame:
         """
@@ -116,6 +132,7 @@ class InterdayTrading:
                 
                 # Add the actual date to the result
                 price_data['actual_date'] = check_date
+                price_data.drop(columns=['market_cap', 'num_shares'], inplace=True)
                 return price_data
             
             # Move to previous day
@@ -176,9 +193,9 @@ class InterdayTrading:
             - free_cash_flow: Sum of FCF over 4 quarters
             - min_fcf: Minimum quarterly FCF
             - last_fcf: Most recent quarter's FCF
-
             - price_to_fcf: Price divided by sum of FCF
         """
+        COL = ['symbol', 'free_cash_flow', 'min_fcf', 'last_fcf', 'price_to_fcf']
         # Filter fundamentals data for the required window (4 quarters)
         sorted_window = self._filter_fundamentals(current_date, 400, 4)
         
@@ -205,7 +222,7 @@ class InterdayTrading:
         df = pd.merge(fcf_metrics, price_data, on='symbol', how='inner')
         df['price_to_fcf'] = df['price'] / df['free_cash_flow']
         
-        return df.drop(columns=['price'])
+        return df[COL]
 
     def get_revenue_growth(self, current_date: date) -> pd.DataFrame:
         """
@@ -226,6 +243,7 @@ class InterdayTrading:
             - min_yoy: Minimum YoY revenue growth over past 4 quarters
             - last_yoy: Most recent quarter's YoY revenue growth
         """
+        COL = ['symbol', 'median_yoy', 'min_yoy', 'last_yoy']
         # Filter fundamentals data for the required window (8 quarters)
         window_valid = self._filter_fundamentals(current_date, 90 * 8, 8)
         
@@ -273,9 +291,9 @@ class InterdayTrading:
         growth_df = pd.DataFrame(growth_results)
         
         if growth_df.empty:
-            return pd.DataFrame(columns=['symbol', 'median_yoy', 'min_yoy', 'last_yoy'])
+            return pd.DataFrame(columns=COL)
         
-        return growth_df
+        return growth_df[COL]
         
     def get_profit_margin(self, current_date: date) -> pd.DataFrame:
         """
@@ -298,6 +316,7 @@ class InterdayTrading:
             - opm_9m: Operating profit margin from 3 quarters ago
             - opm_12m: Operating profit margin from 4 quarters ago
         """
+        COL = ['symbol', 'opm_3m', 'opm_6m', 'opm_9m', 'opm_12m']
         # Filter fundamentals data for the required window (4 quarters)
         sorted_window = self._filter_fundamentals(current_date, 400, 4)
         
@@ -331,9 +350,9 @@ class InterdayTrading:
         profit_margin_df = pd.DataFrame(profit_margin_results)
         
         if profit_margin_df.empty:
-            return pd.DataFrame(columns=['symbol', 'opm_3m', 'opm_6m', 'opm_9m', 'opm_12m'])
+            return pd.DataFrame(columns=COL)
         
-        return profit_margin_df
+        return profit_margin_df[COL]
         
     def get_price_to_ncav(self, price_data: pd.DataFrame, current_date: date) -> pd.DataFrame:
         """
@@ -352,6 +371,7 @@ class InterdayTrading:
             - ncav: Net Current Asset Value (total_current_assets - total_debt)
             - price_to_ncav: Price-to-NCAV ratio
         """
+        COL = ['symbol', 'ncav', 'price_to_ncav']
         # Filter fundamentals data for the required window
         sorted_window = self._filter_fundamentals(current_date, 400, 1)
         
@@ -359,7 +379,7 @@ class InterdayTrading:
         latest = sorted_window.groupby('symbol').first().reset_index()
         
         # Calculate NCAV and price-to-NCAV
-        ncav_df = latest[['symbol', 'total_current_assets', 'total_debt', 'num_shares']].copy()
+        ncav_df = latest[['symbol', 'total_current_assets', 'total_debt']].copy()
         ncav_df['ncav'] = ncav_df['total_current_assets'] - ncav_df['total_debt']
         
         # Merge with price data
@@ -369,7 +389,7 @@ class InterdayTrading:
         df['price_to_ncav'] = (df['num_shares'] * df['price']) / df['ncav']
         
         # Return only the required columns
-        return df[['symbol', 'ncav', 'price_to_ncav']]
+        return df[COL]
     
     def get_price_momentum(self, current_date: date) -> pd.DataFrame:
         """
@@ -392,6 +412,7 @@ class InterdayTrading:
             - m9: Price momentum over 9 months (p0/p3 - 1)
             - m12: Price momentum over 12 months (p0/p4 - 1)
         """
+        COL = ['symbol', 'm3', 'm6', 'm9', 'm12']
         symbols = self.stocks['symbol'].tolist()
         self.logger.info(f"Calculating price momentum for {len(symbols)} stocks")
         
@@ -429,7 +450,7 @@ class InterdayTrading:
         merged_data['m12'] = merged_data['p0'] / merged_data['p4'] - 1
         
         # Select only the required columns
-        result_df = merged_data.reset_index()[['symbol', 'm3', 'm6', 'm9', 'm12']]
+        result_df = merged_data.reset_index()[COL]
         
         self.logger.info(f"Calculated price momentum for {len(result_df)} stocks")
         return result_df
@@ -460,6 +481,7 @@ class InterdayTrading:
             - return_day_price: Price on return_date (optional)
             - date: The date for which features were built
         """
+        assert self._is_trading_day(date), f"Date {date} is not a trading day"
         # Get price data for all stocks on current_date
         self.logger.info(f"Fetching price data for {len(self.stocks)} stocks on {date}")
         price_data = self._get_price_data(self.stocks['symbol'].tolist(), date).set_index('symbol')
@@ -502,14 +524,16 @@ class InterdayTrading:
 
         if use_return_after_days > 1:
             return_date = date + timedelta(days=use_return_after_days)
-            while not self._is_trading_day(return_date):
+            while not self._is_trading_day(return_date) and return_date < date + timedelta(days=use_return_after_days + 10):
                 self.logger.warning(f"Return date {return_date} is not a trading day, trying next day")
                 return_date += timedelta(days=1)
+
+            assert self._is_trading_day(return_date), f"Can't find trading day for {date} after {use_return_after_days} days"
             
             self.logger.info(f"Calculating return after {use_return_after_days} days: from {date} to {return_date}")
             return_after_days_df = self._get_price_data(self.stocks['symbol'].tolist(), return_date)
             return_after_days_df['return_date'] = return_date.strftime('%Y-%m-%d')
-            return_after_days_df.rename(columns={'price': 'return_day_price'}, inplace=True)
+            return_after_days_df.rename(columns={'price': 'return_day_price', 'num_shares': 'return_num_shares', 'market_cap': 'return_market_cap'}, inplace=True)
         else:
             return_after_days_df = pd.DataFrame()
         

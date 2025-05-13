@@ -123,11 +123,12 @@ class FMPOnline:
         return df
 
     def get_index_price(self, symbol: str, date: str):
+        date = pd.to_datetime(date).strftime('%Y-%m-%d')
         prices = self.api.index_prices(symbol, date, date)
         if not prices:
             raise ValueError(f"Can't find price for {symbol} on {date}")
-        assert prices[0]['date'] == date
-        assert prices[0]['symbol'] == symbol
+        assert prices[0]['date'] == date, f"Date mismatch: received {prices[0]['date']}, but requested {date}"
+        assert prices[0]['symbol'] == symbol, f"Symbol mismatch: received {prices[0]['symbol']}, but requested {symbol}"
         return prices[0]['price']
     
 

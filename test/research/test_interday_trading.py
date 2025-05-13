@@ -429,7 +429,8 @@ def test_get_price_to_ncav(trader):
     price_data = pd.DataFrame({
         'symbol': ['AAPL', 'MSFT', 'GOOGL'],
         'date': [date(2024, 1, 1)] * 3,
-        'price': [200.0, 400.0, 3000.0]
+        'price': [200.0, 400.0, 3000.0],
+        'num_shares': [10, 8, 6]
     })
     
     # Call the method under test
