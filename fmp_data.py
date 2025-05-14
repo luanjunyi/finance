@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import os
 from datetime import datetime, date, timedelta
 import logging
@@ -11,7 +12,8 @@ AFTER_PRICE = 'after_price'
 PRICE_METRICS = {BEFORE_PRICE, AFTER_PRICE}
 
 class Dataset:
-    def __init__(self, symbol: Union[str, List[str]], metrics: Dict[str, str], for_date: Union[str, List[str]] = None, db_path: str = '/Users/jluan/code/finance/data/fmp_data.db'):
+    def __init__(self, symbol: Union[str, List[str]], metrics: Dict[str, str], for_date: Union[str, List[str]] = None, 
+                 start_date: str = None, end_date: str = None, db_path: str = '/Users/jluan/code/finance/data/fmp_data.db'):
         """Initialize Dataset object.
         
         Args:
@@ -20,6 +22,8 @@ class Dataset:
                                     If value is empty string or None, the original metric name is used.
             for_date (Union[str, List[str]]): A specific date or list of dates to filter by in 'YYYY-MM-DD' format.
                                            Data will be filtered to include only exact date matches.
+            start_date (str): Start date in 'YYYY-MM-DD' format for date range queries (inclusive).
+            end_date (str): End date in 'YYYY-MM-DD' format for date range queries (inclusive).
             db_path (str): Path to SQLite database
         
         Attributes:
@@ -27,12 +31,23 @@ class Dataset:
             symbol (Union[str, List[str]]): Stock symbol(s).
             metrics (Dict[str, str]): Dictionary mapping metrics to their renamed columns.
             for_date (Union[str, List[str]]): Date(s) to filter by.
+            start_date (str): Start date for date range queries.
+            end_date (str): End date for date range queries.
             db_path (str): Path to SQLite database.
+            
+        Note:
+            Either for_date or (start_date, end_date) must be provided, but not both.
         """
+        # Validate that either for_date or (start_date, end_date) is provided, but not both
+        if for_date is not None and (start_date is not None or end_date is not None):
+            raise ValueError("Either for_date or (start_date, end_date) must be provided, but not both.")
+            
 
         self.symbol = [symbol] if isinstance(symbol, str) else symbol
         self.metrics = metrics
         self.db_path = db_path
+        self.start_date = start_date
+        self.end_date = end_date
         
         # Convert for_date to a list if it's a single string or None
         if isinstance(for_date, str):
@@ -115,8 +130,64 @@ class Dataset:
 
         return pd.DataFrame(price_data)
 
+    def _query_prices(self) -> pd.DataFrame:
+        """Query price data for the date range specified by start_date and end_date.
+        Fill in missing dates with the previous day's price.
+        
+        Returns:
+            pd.DataFrame: DataFrame with price data for each date in the range.
+        """
+        # For now, we only handle adjusted_close as the metric
+        if 'adjusted_close' not in self.metrics or len(self.metrics) > 1:
+            raise ValueError("Only 'adjusted_close' metric is supported for date range queries.")
+            
+        # Create a date range from start_date to end_date
+        date_range = pd.date_range(start=self.start_date, end=self.end_date)
+        date_strings = [d.strftime('%Y-%m-%d') for d in date_range]
+        
+        # Query the database for price data
+        with sqlite3.connect(self.db_path) as conn:
+            # Create placeholders for symbols
+            symbol_placeholders = ','.join(['?' for _ in self.symbol])
+            
+            query = f"""
+            SELECT date, symbol, adjusted_close
+            FROM daily_price
+            WHERE symbol IN ({symbol_placeholders})
+            AND date BETWEEN ? AND ?
+            AND close > 0 AND volume > 0
+            ORDER BY symbol, date
+            """
+            
+            params = list(self.symbol) + [self.start_date, self.end_date]
+            df = pd.read_sql_query(query, conn, params=tuple(params))
+        
+        # Create a complete DataFrame with all dates for all symbols
+        all_dates = pd.DataFrame({
+            'date': np.repeat(date_strings, len(self.symbol)),
+            'symbol': np.tile(self.symbol, len(date_strings))
+        })
+        
+        # Merge with the actual data
+        result = pd.merge(all_dates, df, on=['date', 'symbol'], how='left')
+        
+        # Fill in missing values with the previous day's price
+        result = result.sort_values(['symbol', 'date'])
+        result['adjusted_close'] = result.groupby('symbol')['adjusted_close'].ffill()
+        
+        # Rename columns if specified
+        rename_dict = {k: v for k, v in self.metrics.items() if v and v is not None}
+        if rename_dict:
+            result = result.rename(columns=rename_dict)
+        
+        return result.sort_values(['symbol', 'date'])
+
     def build(self) -> pd.DataFrame:
         """Build and return the dataset as a pandas DataFrame."""
+        
+        # If start_date and end_date are provided, use _query_prices
+        if self.start_date is not None and self.end_date is not None:
+            return self._query_prices()
 
         # Handle regular metrics through database queries
         metric_locations = self._find_metric_locations()
@@ -194,6 +265,7 @@ class Dataset:
 
         return result
 
+    # Use this method instead of calling .data so that it's easier to write unit tests
     def get_data(self) -> pd.DataFrame:
         """Return the dataset."""
         return self.data
