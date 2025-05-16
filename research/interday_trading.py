@@ -558,7 +558,7 @@ class InterdayTrading:
         df = pd.merge(df, self.stocks[['symbol', 'sector', 'industry']], on='symbol', how='left')
         
         # Add the date column
-        df['date'] = date
+        df['date'] = date.strftime('%Y-%m-%d')
         
         return df
     
