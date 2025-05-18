@@ -3,6 +3,51 @@ import pandas as pd
 import matplotlib.pyplot as plt 
 from typing import List
 
+def per_group_return_graph(data, cut_column, min_value, max_value, num_bins=40):
+    assert cut_column in data.columns
+    assert 'return' in data.columns
+    assert 'spx_return' in data.columns
+    assert 'win_spx' in data.columns
+    assert 'symbol' in data.columns
+
+    NUM_BINS = num_bins
+    data = data[data[cut_column].between(min_value, max_value)].copy().reset_index(drop=True)
+    data = data.replace([np.inf, -np.inf], np.nan)
+    data = data.dropna()
+
+    max_value = data[cut_column].max()
+    min_value = data[cut_column].min()
+    interval = (max_value - min_value) / NUM_BINS
+
+    
+    labels = [f'[{min_value + i * interval:.2f}, {min_value + (i+1)*interval:.2f}]' for i in range(NUM_BINS)]
+    round = 2
+    while len(set(labels)) < NUM_BINS:
+        round += 1
+        labels = [f'[{min_value + i * interval:.{round}f}, {min_value + (i+1)*interval:.{round}f}]' for i in range(NUM_BINS)]
+
+    x = pd.cut(data[cut_column], bins=NUM_BINS, labels=labels)
+    y = data.groupby(x, observed=False).agg({"spx_return": "mean", "return": "mean", "symbol": "count", "win_spx": "mean"}).reset_index()
+
+    plt.figure(figsize=(20, 8))
+    bars = plt.bar(y[cut_column], y['return'], edgecolor='black')
+    plt.plot(y[cut_column], y['win_spx'], '-o', color='#0c1ef2', linewidth=1, markersize=7, zorder=3)
+
+    for i, bar in enumerate(bars):
+        plt.text(bar.get_x() + bar.get_width()/2, 
+                0.001, 
+                f'n={y["symbol"].iloc[i]} | r = {y["return"].iloc[i] * 100:.2f}%', 
+                ha='center', 
+                va='bottom', 
+                rotation=90, 
+                fontsize=9,
+                fontweight='bold')
+    plt.xticks(rotation=90)
+    plt.ylabel("Net Return")
+    plt.title(f"{cut_column} and price return, spx average return {data['spx_return'].mean() * 100:.2f}%")
+    plt.show()
+    
+
 def price_to_fcf_graph(data, num_bins=40, max_price_to_fcf=100):
     assert 'price_to_fcf' in data.columns
     assert 'return' in data.columns
