@@ -3,7 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt 
 from typing import List
 
-def per_group_return_graph(data, cut_column, min_value, max_value, num_bins=40):
+def per_group_return_graph(data, cut_column, min_value, max_value, num_bins=40, extra_title=""):
     assert cut_column in data.columns
     assert 'return' in data.columns
     assert 'spx_return' in data.columns
@@ -44,7 +44,7 @@ def per_group_return_graph(data, cut_column, min_value, max_value, num_bins=40):
                 fontweight='bold')
     plt.xticks(rotation=90)
     plt.ylabel("Net Return")
-    plt.title(f"{cut_column} and price return, spx average return {data['spx_return'].mean() * 100:.2f}%")
+    plt.title(f"{cut_column} and price return, spx average return {data['spx_return'].mean() * 100:.2f}% | {extra_title}")
     plt.show()
     
 
