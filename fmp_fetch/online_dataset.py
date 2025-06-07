@@ -5,10 +5,14 @@ from typing import List, Dict, Union, Set
 from tqdm import tqdm
 from utils.logging_config import setup_logging as setup_global_logging
 from .fmp_api import FMPAPI
+from functools import cache
 
 INCOME_STATEMENT = "income_statement"
 CASHFLOW_STATEMENT = "cashflow_statement"
 BALANCE_SHEET = "balance_sheet"
+
+def filter_us_stock(sym):
+    return sym['type'] == 'stock' and sym['exchangeShortName'] in ['NYSE', 'NASDAQ', 'AMEX']
 
 class Dataset:
     """
@@ -44,6 +48,18 @@ class Dataset:
         
         # Setup logging
         self.setup_logging()
+
+    @classmethod
+    @cache
+    def us_stock_symbols(cls):
+        symbols = FMPAPI().get_all_symbols()
+        return [s['symbol'] for s in symbols if filter_us_stock(s)]
+
+    @classmethod
+    @cache
+    def us_active_stocks(cls):
+        symbols = FMPAPI().get_all_tradable_symbols()
+        return [s['symbol'] for s in symbols if filter_us_stock(s)]
     
     @property
     def data(self) -> pd.DataFrame:
@@ -112,7 +128,7 @@ class Dataset:
         
         price_metrics = {'close_price'}
         
-        derived_metrics = {'pe', 'price_to_fcf'}
+        derived_metrics = {'pe', 'price_to_fcf', 'price_to_owner_earning'}
         
         # Categorize requested metrics
         categorized_metrics = {
@@ -149,6 +165,14 @@ class Dataset:
             # Price to FCF needs price, free cash flow data, and weighted average shares from income statement
             categorized_metrics['price'].add('close_price')
             categorized_metrics[CASHFLOW_STATEMENT].add('freeCashFlow')
+            categorized_metrics[INCOME_STATEMENT].add('weightedAverageShsOutDil')
+        
+        if 'price_to_owner_earning' in self.metrics:
+            # Price to owner's earning needs price, net income, depreciation & amortization, capital expenditure, and weighted average shares
+            categorized_metrics['price'].add('close_price')
+            categorized_metrics[INCOME_STATEMENT].add('netIncome')
+            categorized_metrics[CASHFLOW_STATEMENT].add('depreciationAndAmortization')
+            categorized_metrics[CASHFLOW_STATEMENT].add('capitalExpenditure')
             categorized_metrics[INCOME_STATEMENT].add('weightedAverageShsOutDil')
         
         return categorized_metrics
@@ -262,7 +286,7 @@ class Dataset:
         return df.set_index('symbol')
     
     def _compute_pe(self, price_df: pd.DataFrame) -> pd.DataFrame:
-        """Compute PE ratio for each date in the price DataFrame.
+        """Compute TTM PE ratio for each date in the price DataFrame.
         
         Args:
             price_df (pd.DataFrame): DataFrame with price data
@@ -386,8 +410,6 @@ class Dataset:
                     'price_to_fcf': price_to_fcf
                 })
         
-
-        
         return pd.DataFrame(result_data)
     
     def _get_latest_values_for_dates(self, df: pd.DataFrame, date_range: pd.DatetimeIndex) -> pd.DataFrame:
@@ -471,6 +493,10 @@ class Dataset:
         if 'price_to_fcf' in self.metrics:
             price_to_fcf_df = self._compute_price_to_fcf(price_df)
             dfs.append(price_to_fcf_df)
+            
+        if 'price_to_owner_earning' in self.metrics:
+            price_to_oe_df = self._compute_price_to_owner_earning(price_df)
+            dfs.append(price_to_oe_df)
         
         result = dfs[0]
         for df in dfs[1:]:
@@ -487,3 +513,81 @@ class Dataset:
         result = result.sort_values(['symbol', 'date']).set_index(['symbol', 'date'])
         
         return result
+        
+    def _compute_price_to_owner_earning(self, price_df: pd.DataFrame) -> pd.DataFrame:
+        """Compute price to TTM owner's earning ratio for each date in the price DataFrame.
+        
+        Owner's earning is defined as:
+        netIncome + depreciationAndAmortization - capitalExpenditure
+        
+        Args:
+            price_df (pd.DataFrame): DataFrame with price data
+            
+        Returns:
+            pd.DataFrame: DataFrame with price to TTM owner's earning ratio data
+        """
+        self.logger.info("Computing price to TTM owner's earning ratios")
+        
+        # We need income statement data for netIncome and weightedAverageShsOutDil
+        # and cash flow statement for depreciationAndAmortization and capitalExpenditure
+        income_df = self.financial_statements[INCOME_STATEMENT]
+        cashflow_df = self.financial_statements[CASHFLOW_STATEMENT]
+        
+        result_data = []
+        
+        # For each symbol and date in the price DataFrame
+        for symbol in tqdm(self.symbols):
+            symbol_prices = price_df.xs(symbol)
+            
+            for _, price_row in symbol_prices.iterrows():
+                date = price_row['date']
+                close_price = price_row['close_price']
+                
+                # Get cash flow statements with filing dates before this date
+                valid_cashflow_statements = cashflow_df.xs(symbol)
+                valid_cashflow_statements = valid_cashflow_statements[
+                    (valid_cashflow_statements['filing_date'] < date) &
+                    (valid_cashflow_statements['date'] > date - timedelta(days=365 + 31 * 3))
+                ].sort_values('filing_date', ascending=False)
+                
+                # Get income statements with filing dates before this date
+                valid_income_statements = income_df.xs(symbol)  
+                valid_income_statements = valid_income_statements[
+                    (valid_income_statements['filing_date'] < date) &
+                    (valid_income_statements['date'] > date - timedelta(days=365 + 31 * 3))
+                ].sort_values('filing_date', ascending=False)
+                
+                if len(valid_cashflow_statements) < 4 or len(valid_income_statements) < 4:
+                    self.logger.warning(f"Not enough statements for {symbol} on {date.date()}" + \
+                        f" cashflow: {valid_cashflow_statements['filing_date'].tolist()}, income: {valid_income_statements['filing_date'].tolist()}")
+                    continue
+                
+                # Take the 4 most recent quarters for cash flow and income
+                last_4_quarters_cashflow = valid_cashflow_statements.head(4)
+                last_4_quarters_income = valid_income_statements.head(4)
+                # Take the most recent income statement for shares
+                latest_income = valid_income_statements.iloc[0]
+
+                
+                # Sum net income, depreciation & amortization, and capital expenditure over the last 4 quarters
+                net_income_sum = last_4_quarters_income['netIncome'].sum()
+                depreciation_sum = last_4_quarters_cashflow['depreciationAndAmortization'].sum()
+                capex_sum = abs(last_4_quarters_cashflow['capitalExpenditure'].sum())  # Convert to positive
+                
+                # Calculate owner's earnings
+                owners_earnings = net_income_sum + depreciation_sum - capex_sum
+                
+                # Get shares outstanding
+                shares = latest_income['weightedAverageShsOutDil']
+                
+                # Calculate owner's earnings per share and price to owner's earnings ratio
+                oe_per_share = owners_earnings / shares
+                price_to_oe = close_price / oe_per_share
+                
+                result_data.append({
+                    'symbol': symbol,
+                    'date': date,
+                    'price_to_owner_earning': price_to_oe
+                })
+        
+        return pd.DataFrame(result_data)

@@ -430,7 +430,7 @@ def mock_dataset_with_statements():
         # Initialize the Dataset instance
         dataset = Dataset(
             symbols=['AAPL', 'MSFT'],
-            metrics=['pe', 'price_to_fcf', 'close_price'],
+            metrics=['pe', 'price_to_fcf', 'price_to_owner_earning', 'close_price'],
             start_date='2023-01-01',
             end_date='2024-01-31'
         )
@@ -457,20 +457,20 @@ def mock_dataset_with_statements():
         # Cash flow statements
         cashflow_data = pd.DataFrame([
             # AAPL data - ordered by filing_date (newest to oldest)
-            {'symbol': 'AAPL', 'date': '2023-12-31', 'filing_date': '2024-01-15', 'freeCashFlow': 40},
-            {'symbol': 'AAPL', 'date': '2023-09-30', 'filing_date': '2023-10-15', 'freeCashFlow': 35},
-            {'symbol': 'AAPL', 'date': '2023-06-30', 'filing_date': '2023-07-15', 'freeCashFlow': 30},
-            {'symbol': 'AAPL', 'date': '2023-03-31', 'filing_date': '2023-04-15', 'freeCashFlow': 32},
-            {'symbol': 'AAPL', 'date': '2022-12-31', 'filing_date': '2023-01-15', 'freeCashFlow': 60},
-            {'symbol': 'AAPL', 'date': '2022-09-30', 'filing_date': '2022-10-15', 'freeCashFlow': 55},
+            {'symbol': 'AAPL', 'date': '2023-12-31', 'filing_date': '2024-01-15', 'freeCashFlow': 40, 'depreciationAndAmortization': 10, 'capitalExpenditure': -8},
+            {'symbol': 'AAPL', 'date': '2023-09-30', 'filing_date': '2023-10-15', 'freeCashFlow': 35, 'depreciationAndAmortization': 9, 'capitalExpenditure': -7},
+            {'symbol': 'AAPL', 'date': '2023-06-30', 'filing_date': '2023-07-15', 'freeCashFlow': 30, 'depreciationAndAmortization': 8, 'capitalExpenditure': -6},
+            {'symbol': 'AAPL', 'date': '2023-03-31', 'filing_date': '2023-04-15', 'freeCashFlow': 32, 'depreciationAndAmortization': 10, 'capitalExpenditure': -5},
+            {'symbol': 'AAPL', 'date': '2022-12-31', 'filing_date': '2023-01-15', 'freeCashFlow': 60, 'depreciationAndAmortization': 12, 'capitalExpenditure': -4},
+            {'symbol': 'AAPL', 'date': '2022-09-30', 'filing_date': '2022-10-15', 'freeCashFlow': 55, 'depreciationAndAmortization': 11, 'capitalExpenditure': -3},
             
             # MSFT data - ordered by filing_date (newest to oldest)
-            {'symbol': 'MSFT', 'date': '2023-12-31', 'filing_date': '2024-01-20', 'freeCashFlow': 25},
-            {'symbol': 'MSFT', 'date': '2023-09-30', 'filing_date': '2023-10-20', 'freeCashFlow': 22},
-            {'symbol': 'MSFT', 'date': '2023-06-30', 'filing_date': '2023-07-20', 'freeCashFlow': 20},
-            {'symbol': 'MSFT', 'date': '2023-03-31', 'filing_date': '2023-04-20', 'freeCashFlow': 18},
-            {'symbol': 'MSFT', 'date': '2022-12-31', 'filing_date': '2023-01-20', 'freeCashFlow': 24},
-            {'symbol': 'MSFT', 'date': '2022-09-30', 'filing_date': '2022-10-20', 'freeCashFlow': 21}
+            {'symbol': 'MSFT', 'date': '2023-12-31', 'filing_date': '2024-01-20', 'freeCashFlow': 25, 'depreciationAndAmortization': 4, 'capitalExpenditure': -6},
+            {'symbol': 'MSFT', 'date': '2023-09-30', 'filing_date': '2023-10-20', 'freeCashFlow': 22, 'depreciationAndAmortization': 5, 'capitalExpenditure': -5},
+            {'symbol': 'MSFT', 'date': '2023-06-30', 'filing_date': '2023-07-20', 'freeCashFlow': 20, 'depreciationAndAmortization': 6, 'capitalExpenditure': -4},
+            {'symbol': 'MSFT', 'date': '2023-03-31', 'filing_date': '2023-04-20', 'freeCashFlow': 18, 'depreciationAndAmortization': 7, 'capitalExpenditure': -3},
+            {'symbol': 'MSFT', 'date': '2022-12-31', 'filing_date': '2023-01-20', 'freeCashFlow': 24, 'depreciationAndAmortization': 8, 'capitalExpenditure': -2},
+            {'symbol': 'MSFT', 'date': '2022-09-30', 'filing_date': '2022-10-20', 'freeCashFlow': 21, 'depreciationAndAmortization': 9, 'capitalExpenditure': -1}
         ])
         
         # Convert dates to datetime and set index
@@ -602,7 +602,6 @@ def test_compute_price_to_fcf(mock_dataset_with_statements):
         # This date will have all 4 quarters from 2023
         {'symbol': 'AAPL', 'date': '2024-01-20', 'close_price': 210},
 
-        
         # This date should have exactly 4 valid quarters for AAPL
         # (2022-09-30, 2022-12-31, 2023-03-31, 2023-06-30)
         {'symbol': 'AAPL', 'date': '2023-07-20', 'close_price': 195},        
@@ -681,143 +680,209 @@ def test_compute_price_to_fcf(mock_dataset_with_statements):
 
 
 
-def test_build_with_derived_metrics(mock_dataset_with_statements):
-    """Test the build method with derived metrics (PE and price-to-FCF).
+def test_compute_price_to_owner_earning(mock_dataset_with_statements):
+    """Test the _compute_price_to_owner_earning method."""
+    dataset, _ = mock_dataset_with_statements
     
-    This test focuses on the integration aspects of the build method:
-    1. Every date in the date range is included in the result
-    2. The returned dataframe has correct columns
-    3. The return result has correct index structure
-    4. The dataframes are joined/merged correctly
-    """
-    dataset, mock_api = mock_dataset_with_statements
-    
-    # Define test data
-    test_date_range = pd.date_range(start='2023-01-01', end='2023-01-10')
-    test_symbols = ['AAPL', 'MSFT']
-    
-    # Create mock price data with one entry for each symbol and date
-    mock_prices = []
-    for symbol in test_symbols:
-        for date in test_date_range:
-            mock_prices.append({
-                'date': date.strftime('%Y-%m-%d'),
-                'adjClose': 100.0,
-                'symbol': symbol
-            })
-    
-    # Setup mock return values
-    mock_api.get_prices.return_value = mock_prices
-    
-    # Create mock dataframes that will be returned by the compute methods
-    mock_pe_df = pd.DataFrame([
-        {'symbol': 'AAPL', 'date': pd.Timestamp('2023-01-01'), 'pe': 15.0},
-        {'symbol': 'AAPL', 'date': pd.Timestamp('2023-01-02'), 'pe': 16.0},
-        {'symbol': 'MSFT', 'date': pd.Timestamp('2023-01-01'), 'pe': 25.0},
-        {'symbol': 'MSFT', 'date': pd.Timestamp('2023-01-02'), 'pe': 26.0}
+    # Create mock price data with dates to test different scenarios
+    price_data = pd.DataFrame([
+        # This date should have exactly 2 valid quarters (2022-09-30 and 2022-12-31)
+        # But that's less than 4, so it should be skipped
+        {'symbol': 'AAPL', 'date': '2023-01-20', 'close_price': 190},
+        
+        {'symbol': 'AAPL', 'date': '2024-01-05', 'close_price': 200},
+        
+        # This date will have all 4 quarters from 2023
+        {'symbol': 'AAPL', 'date': '2024-01-20', 'close_price': 210},
+
+        # This date should have exactly 4 valid quarters for AAPL
+        # (2022-09-30, 2022-12-31, 2023-03-31, 2023-06-30)
+        {'symbol': 'AAPL', 'date': '2023-07-20', 'close_price': 195},        
+        
+        # This date should have exactly 3 valid quarters for MSFT
+        # But that's less than 4, so it should be skipped
+        {'symbol': 'MSFT', 'date': '2024-01-05', 'close_price': 400},
+        
+        # This date will have all 4 quarters from 2023
+        {'symbol': 'MSFT', 'date': '2024-01-25', 'close_price': 420},
     ])
     
-    mock_ptf_df = pd.DataFrame([
-        {'symbol': 'AAPL', 'date': pd.Timestamp('2023-01-01'), 'price_to_fcf': 10.0},
-        {'symbol': 'AAPL', 'date': pd.Timestamp('2023-01-02'), 'price_to_fcf': 11.0},
-        {'symbol': 'MSFT', 'date': pd.Timestamp('2023-01-01'), 'price_to_fcf': 20.0},
-        {'symbol': 'MSFT', 'date': pd.Timestamp('2023-01-02'), 'price_to_fcf': 21.0}
+    price_data['date'] = pd.to_datetime(price_data['date'])
+    price_data = price_data.set_index('symbol')
+    
+    # Call the method
+    result = dataset._compute_price_to_owner_earning(price_data)
+    
+    # Verify the result has the correct structure
+    assert not result.empty
+    assert set(result.columns) == {'symbol', 'date', 'price_to_owner_earning'}
+    
+    # Convert to a more easily queryable format for testing
+    result_df = result.set_index(['symbol', 'date'])
+    
+    # Check that dates with insufficient data (less than 4 quarters) are not in the results
+    assert ('AAPL', pd.Timestamp('2023-01-20')) not in result_df.index, "Date with insufficient quarters should be skipped"
+    
+    # Verify AAPL on 2024-01-05 has the correct calculation
+    # Net Income: 50 + 22 + 20 + 25 = 117
+    # D&A: 12 + 10 + 8 + 9 = 39
+    # CapEx: 4 + 5 + 6 + 7 = 22
+    # Owner's Earnings = 117 + 39 - 22 = 134
+    # Shares = 15
+    # OE per share = 134 / 15 = 8.93
+    # Price to OE = 200 / 8.93 = 22.39
+    aapl_jan05_2024_ptoe = result_df.loc[('AAPL', pd.Timestamp('2024-01-05')), 'price_to_owner_earning']
+    expected_ptoe = 200 / ((117 + 39 - 22) / 15)
+    assert aapl_jan05_2024_ptoe == pytest.approx(expected_ptoe, rel=1e-6)
+
+    # For AAPL on Jan 20, 2024 - should use all 4 quarters from 2023
+    # Net Income: 22 + 20 + 25 + 30 = 97
+    # D&A: 10 + 8 + 9 + 10 = 37
+    # CapEx: 5 + 6 + 7 + 8 = 26
+    # Owner's Earnings = 97 + 37 - 26 = 108
+    # Shares = 15
+    # OE per share = 108 / 15 = 7.2
+    # Price to OE = 210 / 7.2 = 29.1667
+    aapl_jan20_2024_ptoe = result_df.loc[('AAPL', pd.Timestamp('2024-01-20')), 'price_to_owner_earning']
+    expected_ptoe = 210 / ((97 + 37 - 26) / 15)
+    assert aapl_jan20_2024_ptoe == pytest.approx(expected_ptoe, rel=1e-6)        
+    
+    # MSFT on 2024-01-05 should have 4 valid quarters:
+    # (2022-12-31, 2023-03-31, 2023-06-30, 2023-09-30)
+    # The 2023-12-31 quarter is excluded because filing date (2024-01-20) is after test date (2024-01-05)
+    assert ('MSFT', pd.Timestamp('2024-01-05')) in result_df.index, "Date with 4 valid quarters should be included"
+    
+    # Verify MSFT on 2024-01-05 has the correct calculation
+    # Net Income: 19 + 15 + 16 + 18 = 68
+    # D&A: 8 + 7 + 6 + 5 = 26
+    # CapEx: 2 + 3 + 4 + 5 = 14
+    # Owner's Earnings = 68 + 26 - 14 = 80
+    # Shares = 10
+    # OE per share = 80 / 10 = 8
+    # Price to OE = 400 / 8 = 50
+    msft_jan05_2024_ptoe = result_df.loc[('MSFT', pd.Timestamp('2024-01-05')), 'price_to_owner_earning']
+    expected_ptoe = 400 / ((68 + 26 - 14) / 10)
+    assert msft_jan05_2024_ptoe == pytest.approx(expected_ptoe, rel=1e-6)
+    
+    # For AAPL on Jul 20, 2023 - should use 4 valid quarters
+    # (2022-09-30, 2022-12-31, 2023-03-31, 2023-06-30)
+    # Net Income: 48 + 50 + 22 + 20 = 140
+    # D&A: 11 + 12 + 10 + 8 = 41
+    # CapEx: 3 + 4 + 5 + 6 = 18
+    # Owner's Earnings = 140 + 41 - 18 = 163
+    # Shares = 15
+    # OE per share = 163 / 15 = 10.87
+    # Price to OE = 195 / 10.87 = 17.94
+    aapl_jul20_2023_ptoe = result_df.loc[('AAPL', pd.Timestamp('2023-07-20')), 'price_to_owner_earning']
+    expected_ptoe = 195 / ((140 + 41 - 18) / 15)
+    assert aapl_jul20_2023_ptoe == pytest.approx(expected_ptoe, rel=1e-6)
+    
+    # For MSFT on Jan 25, 2024 - should use all 4 quarters from 2023
+    # Net Income: 15 + 16 + 18 + 20 = 69
+    # D&A: 7 + 6 + 5 + 4 = 22
+    # CapEx: 3 + 4 + 5 + 6 = 18
+    # Owner's Earnings = 69 + 22 - 18 = 73
+    # Shares = 10
+    # OE per share = 73 / 10 = 7.3
+    # Price to OE = 420 / 7.3 = 57.53
+    msft_jan25_2024_ptoe = result_df.loc[('MSFT', pd.Timestamp('2024-01-25')), 'price_to_owner_earning']
+    expected_ptoe = 420 / ((69 + 22 - 18) / 10)
+    assert msft_jan25_2024_ptoe == pytest.approx(expected_ptoe, rel=1e-6)
+
+
+def test_compute_price_to_fcf(mock_dataset_with_statements):
+    """Test the _compute_price_to_fcf method."""
+    dataset, _ = mock_dataset_with_statements
+    
+    # Create mock price data with dates to test different scenarios
+    price_data = pd.DataFrame([
+        # This date should have exactly 2 valid quarters (2022-09-30 and 2022-12-31)
+        # But that's less than 4, so it should be skipped
+        {'symbol': 'AAPL', 'date': '2023-01-20', 'close_price': 190},
+        
+        # This date should have exactly 3 valid quarters (2023-03-31, 2023-06-30, 2023-09-30)
+        # Dec 31 data is too new (filing date 2024-01-15 is after 2024-01-05)
+        # But that's less than 4, so it should be skipped
+        {'symbol': 'AAPL', 'date': '2024-01-05', 'close_price': 200},
+        
+        # This date will have all 4 quarters from 2023
+        {'symbol': 'AAPL', 'date': '2024-01-20', 'close_price': 210},
+
+        # This date should have exactly 4 valid quarters for AAPL
+        # (2022-09-30, 2022-12-31, 2023-03-31, 2023-06-30)
+        {'symbol': 'AAPL', 'date': '2023-07-20', 'close_price': 195},        
+        
+        # This date should have exactly 3 valid quarters for MSFT
+        # But that's less than 4, so it should be skipped
+        {'symbol': 'MSFT', 'date': '2024-01-05', 'close_price': 400},
+        
+        # This date will have all 4 quarters from 2023
+        {'symbol': 'MSFT', 'date': '2024-01-25', 'close_price': 420},
     ])
     
-    # Create a mock price dataframe that would be created by _fetch_price_data
-    mock_price_df = pd.DataFrame([
-        {'symbol': 'AAPL', 'date': pd.Timestamp('2023-01-01'), 'close_price': 150.0},
-        {'symbol': 'AAPL', 'date': pd.Timestamp('2023-01-02'), 'close_price': 155.0},
-        {'symbol': 'MSFT', 'date': pd.Timestamp('2023-01-01'), 'close_price': 250.0},
-        {'symbol': 'MSFT', 'date': pd.Timestamp('2023-01-02'), 'close_price': 255.0}
-    ])
+    price_data['date'] = pd.to_datetime(price_data['date'])
+    price_data = price_data.set_index('symbol')
     
-    # Create mock financial statements dataframe with proper structure
-    mock_income_df = pd.DataFrame([
-        {'symbol': 'AAPL', 'date': pd.Timestamp('2022-12-01'), 'filing_date': pd.Timestamp('2022-12-15'), 'netIncome': 100.0, 'weightedAverageShsOutDil': 15.0},
-        {'symbol': 'MSFT', 'date': pd.Timestamp('2022-12-01'), 'filing_date': pd.Timestamp('2022-12-15'), 'netIncome': 200.0, 'weightedAverageShsOutDil': 10.0}
-    ]).set_index('symbol')
+    # Call the method
+    result = dataset._compute_price_to_fcf(price_data)
     
-    mock_cashflow_df = pd.DataFrame([
-        {'symbol': 'AAPL', 'date': pd.Timestamp('2022-12-01'), 'filing_date': pd.Timestamp('2022-12-15'), 'freeCashFlow': 120.0},
-        {'symbol': 'MSFT', 'date': pd.Timestamp('2022-12-01'), 'filing_date': pd.Timestamp('2022-12-15'), 'freeCashFlow': 220.0}
-    ]).set_index('symbol')
+    # Verify the result has the correct structure
+    assert not result.empty
+    assert set(result.columns) == {'symbol', 'date', 'price_to_fcf'}
     
-    # Create mock financial metrics dataframe that would be returned by _get_latest_values_for_dates
-    mock_income_latest_df = pd.DataFrame([
-        {'symbol': 'AAPL', 'date': pd.Timestamp('2023-01-01'), 'netIncome': 100.0, 'weightedAverageShsOutDil': 15.0},
-        {'symbol': 'AAPL', 'date': pd.Timestamp('2023-01-02'), 'netIncome': 105.0, 'weightedAverageShsOutDil': 15.0},
-        {'symbol': 'MSFT', 'date': pd.Timestamp('2023-01-01'), 'netIncome': 200.0, 'weightedAverageShsOutDil': 10.0},
-        {'symbol': 'MSFT', 'date': pd.Timestamp('2023-01-02'), 'netIncome': 210.0, 'weightedAverageShsOutDil': 10.0}
-    ]).set_index(['symbol', 'date'])
+    # Convert to a more easily queryable format for testing
+    result_df = result.set_index(['symbol', 'date'])
     
-    mock_cashflow_latest_df = pd.DataFrame([
-        {'symbol': 'AAPL', 'date': pd.Timestamp('2023-01-01'), 'freeCashFlow': 120.0},
-        {'symbol': 'AAPL', 'date': pd.Timestamp('2023-01-02'), 'freeCashFlow': 125.0},
-        {'symbol': 'MSFT', 'date': pd.Timestamp('2023-01-01'), 'freeCashFlow': 220.0},
-        {'symbol': 'MSFT', 'date': pd.Timestamp('2023-01-02'), 'freeCashFlow': 225.0}
-    ]).set_index(['symbol', 'date'])
+    # Check that dates with insufficient data (less than 4 quarters) are not in the results
+    assert ('AAPL', pd.Timestamp('2023-01-20')) not in result_df.index, "Date with insufficient quarters should be skipped"
     
-    # Mock dictionary to store financial statements
-    mock_financial_statements = {
-        'income_statement': mock_income_df,
-        'cashflow_statement': mock_cashflow_df
-    }
+    # For AAPL on Jan 5, 2024 - should use 4 quarters
+    # (2022-12-31, 2023-03-31, 2023-06-30, 2023-09-30)
+    # Total FCF = 60 + 32 + 30 + 35 = 157
+    # Shares = 15
+    # FCF per share = 157 / 15 = 10.47
+    # Price to FCF = 200 / 10.47 = 19.10
+    aapl_jan05_2024_ptf = result_df.loc[('AAPL', pd.Timestamp('2024-01-05')), 'price_to_fcf']
+    expected_ptf = 200 / (157 / 15)
+    assert aapl_jan05_2024_ptf == pytest.approx(expected_ptf, rel=1e-6)
     
-    # Function to return appropriate mock data based on statement type
-    def mock_fetch_financial_statements(statement_type, required_metrics):
-        return mock_financial_statements.get(statement_type, pd.DataFrame())
+    # For AAPL on Jan 20, 2024 - should use all 4 quarters from 2023
+    # Total FCF = 40 + 35 + 30 + 32 = 137
+    # Shares = 15
+    # FCF per share = 137 / 15 = 9.13
+    # Price to FCF = 210 / 9.13 = 23.00
+    aapl_jan20_2024_ptf = result_df.loc[('AAPL', pd.Timestamp('2024-01-20')), 'price_to_fcf']
+    expected_ptf = 210 / (137 / 15)
+    assert aapl_jan20_2024_ptf == pytest.approx(expected_ptf, rel=1e-6)
+
+    # For AAPL on Jul 20, 2023 - should use 4 quarters
+    # (2022-09-30, 2022-12-31, 2023-03-31, 2023-06-30)
+    # Total FCF = 55 + 60 + 32 + 30 = 177
+    # Shares = 15
+    # FCF per share = 177 / 15 = 11.8
+    # Price to FCF = 195 / 11.8 = 16.53
+    aapl_jul20_2023_ptf = result_df.loc[('AAPL', pd.Timestamp('2023-07-20')), 'price_to_fcf']
+    expected_ptf = 195 / (177 / 15)
+    assert aapl_jul20_2023_ptf == pytest.approx(expected_ptf, rel=1e-6)    
     
-    # Function to return appropriate mock data based on df
-    def mock_get_latest_values_for_dates(df, date_range):
-        if 'netIncome' in df.columns:
-            return mock_income_latest_df
-        elif 'freeCashFlow' in df.columns:
-            return mock_cashflow_latest_df
-        return pd.DataFrame(index=pd.MultiIndex.from_product([test_symbols, date_range], names=['symbol', 'date']))
+    # For MSFT on Jan 5, 2024 - should use 4 quarters
+    # (2022-12-31, 2023-03-31, 2023-06-30, 2023-09-30)
+    # Total FCF = 24 + 18 + 20 + 22 = 84
+    # Shares = 10
+    # FCF per share = 84 / 10 = 8.4
+    # Price to FCF = 400 / 8.4 = 47.62
+    msft_jan05_2024_ptf = result_df.loc[('MSFT', pd.Timestamp('2024-01-05')), 'price_to_fcf']
+    expected_ptf = 400 / (84 / 10)
+    assert msft_jan05_2024_ptf == pytest.approx(expected_ptf, rel=1e-6)
     
-    # Mock all the component methods to isolate testing of the build method's integration logic
-    with patch.object(dataset, '_fetch_price_data', return_value=mock_price_df), \
-         patch.object(dataset, '_compute_pe', return_value=mock_pe_df), \
-         patch.object(dataset, '_compute_price_to_fcf', return_value=mock_ptf_df), \
-         patch.object(dataset, '_fetch_financial_statements', side_effect=mock_fetch_financial_statements), \
-         patch.object(dataset, '_get_latest_values_for_dates', side_effect=mock_get_latest_values_for_dates):
-        
-        # Override date range for testing
-        dataset.start_date = '2023-01-01'
-        dataset.end_date = '2023-01-02'
-        
-        # Call the build method
-        result = dataset.build()
-        
-        # 1. Verify all dates in the range are included
-        expected_dates = pd.date_range(start='2023-01-01', end='2023-01-02')
-        for symbol in test_symbols:
-            for date in expected_dates:
-                assert (symbol, date) in result.index, f"Missing expected date {date} for {symbol}"
-        
-        # 2. Verify the returned dataframe has correct columns
-        expected_columns = ['close_price', 'pe', 'price_to_fcf']
-        for col in expected_columns:
-            assert col in result.columns, f"Missing expected column {col}"
-        
-        # 3. Verify the return result has correct index structure
-        assert result.index.names == ['symbol', 'date'], "Index should be a MultiIndex with symbol and date"
-        
-        # 4. Verify the dataframes are joined/merged correctly
-        # Check that values from each source dataframe are correctly merged
-        for symbol in test_symbols:
-            for date in expected_dates:
-                row = result.loc[(symbol, date)]
-                # Find corresponding rows in source dataframes
-                price_row = mock_price_df[(mock_price_df['symbol'] == symbol) & (mock_price_df['date'] == date)]
-                pe_row = mock_pe_df[(mock_pe_df['symbol'] == symbol) & (mock_pe_df['date'] == date)]
-                ptf_row = mock_ptf_df[(mock_ptf_df['symbol'] == symbol) & (mock_ptf_df['date'] == date)]
-                
-                # Verify values match
-                assert row['close_price'] == price_row['close_price'].values[0]
-                assert row['pe'] == pe_row['pe'].values[0]
-                assert row['price_to_fcf'] == ptf_row['price_to_fcf'].values[0]
+    # For MSFT on Jan 25, 2024 - should use all 4 quarters from 2023
+    # Total FCF = 25 + 22 + 20 + 18 = 85
+    # Shares = 10
+    # FCF per share = 85 / 10 = 8.5
+    # Price to FCF = 420 / 8.5 = 49.41
+    msft_jan25_2024_ptf = result_df.loc[('MSFT', pd.Timestamp('2024-01-25')), 'price_to_fcf']
+    expected_ptf = 420 / (85 / 10)
+    assert msft_jan25_2024_ptf == pytest.approx(expected_ptf, rel=1e-6)
 
 
 if __name__ == "__main__":
