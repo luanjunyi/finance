@@ -31,7 +31,7 @@ class FMPAPI:
         """Configure logging for the fetcher"""
         setup_global_logging()
 
-    def make_request(self, endpoint: str, params: Optional[Dict[str, Any]] = None) -> Optional[Any]:
+    def make_request(self, endpoint: str, params: Optional[Dict[str, Any]] = None, base_url: Optional[str] = None) -> Optional[Any]:
         """
         Make a synchronous HTTP request to the FMP API
         
@@ -55,7 +55,7 @@ class FMPAPI:
         if time_since_last < self.rate_limit_delay:
             time.sleep(self.rate_limit_delay - time_since_last)
 
-        url = f"{self.base_url}/{endpoint}"
+        url = f"{base_url or self.base_url}/{endpoint}"
 
         for attempt in range(3):
             try:
@@ -78,7 +78,15 @@ class FMPAPI:
 
         return None
 
+    # All symbols list
+    @cache
+    def get_all_symbols(self):
+        return self.make_request('stock/list', base_url='https://financialmodelingprep.com/api/v3')
 
+    @cache
+    def get_all_tradable_symbols(self):
+        return self.make_request('available-traded/list', base_url='https://financialmodelingprep.com/api/v3')
+    
 
 
     # Price fetching functions
