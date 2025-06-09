@@ -10,19 +10,19 @@ from tqdm import tqdm
 class PriceCrawler(BaseFMPCrawler):
     async def crawl_symbol_prices(self, symbol: str, from_date: str, to_date: str):
         prices = await self.make_request(
-            f'historical-price-full/{symbol}',
-            {'from': from_date, 'to': to_date}
+            'historical-price-eod/dividend-adjusted',
+            {'symbol': symbol, 'from': from_date, 'to': to_date}
         )
 
-        if not prices or 'historical' not in prices:
-            logging.error(f"Failed to fetch prices for {symbol}")
+        if not prices:
+            logging.warning(f"Failed to fetch prices for {symbol}")
             return
 
         cursor = self.db.cursor()
-        for price in prices['historical']:
+        for price in prices:
             self.check_missing_fields(
                 price,
-                ['date', 'open', 'high', 'low', 'close', 'adjClose', 'volume'],
+                ['date', 'adjOpen', 'adjHigh', 'adjLow', 'adjClose', 'volume'],
                 symbol
             )
 
@@ -30,15 +30,14 @@ class PriceCrawler(BaseFMPCrawler):
                 if int(price.get('volume')) > 0 and float(price.get('adjClose') > 0.0):
                     cursor.execute('''
                         INSERT OR REPLACE INTO daily_price 
-                        (symbol, date, open, high, low, close, adjusted_close, volume)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        (symbol, date, open, high, low, close, volume)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
                     ''', (
                         symbol,
                         price.get('date'),
-                        price.get('open'),
-                        price.get('high'),
-                        price.get('low'),
-                        price.get('close'),
+                        price.get('adjOpen'),
+                        price.get('adjHigh'),
+                        price.get('adjLow'),
                         price.get('adjClose'),
                         price.get('volume')
                     ))
@@ -48,7 +47,6 @@ class PriceCrawler(BaseFMPCrawler):
 
     async def crawl(self, symbols=None):
         logging.info("Starting price crawling...")
-        start_time = time.time()
 
         if symbols is None:
             symbols = self.get_symbols_to_crawl()
@@ -60,9 +58,6 @@ class PriceCrawler(BaseFMPCrawler):
         for symbol in tqdm(symbols, desc="Crawling symbols"):
             await self.crawl_symbol_prices(symbol, from_date, to_date)
             self.db.commit()
-
-        elapsed = time.time() - start_time
-        logging.info(f"Price crawling completed in {elapsed:.2f} seconds")
 
 
 async def main():

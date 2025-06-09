@@ -10,12 +10,13 @@ from utils.logging_config import setup_logging as setup_global_logging
 
 
 class BaseFMPCrawler:
-    def __init__(self, api_version: str = 'v3'):
+    def __init__(self, db_path: str):
+        self.skip_existing = True
         self.api_key = os.getenv('FMP_API_KEY')
         if not self.api_key:
             raise ValueError("FMP_API_KEY environment variable not set")
 
-        self.base_url = f"https://financialmodelingprep.com/api/{api_version}"
+        self.base_url = "https://financialmodelingprep.com/stable"
         self.last_request_time = 0
         self.rate_limit_delay = 0.25  # 4 requests per second
 
@@ -23,14 +24,14 @@ class BaseFMPCrawler:
         self.setup_logging()
 
         # Setup database
-        self.db = sqlite3.connect('/Users/jluan/code/finance/data/fmp_data.db')
+        self.db = sqlite3.connect(db_path)
         self.db.row_factory = sqlite3.Row
 
     def setup_logging(self):
         """Configure logging for the crawler"""
         setup_global_logging()
 
-    async def make_request(self, endpoint: str, params: Optional[Dict[str, Any]] = None) -> Optional[Any]:
+    async def make_request(self, endpoint: str, params: Optional[Dict[str, Any]] = None, base_url: Optional[str] = None) -> Optional[Any]:
         if params is None:
             params = {}
         params['apikey'] = self.api_key
@@ -41,7 +42,7 @@ class BaseFMPCrawler:
         if time_since_last < self.rate_limit_delay:
             await asyncio.sleep(self.rate_limit_delay - time_since_last)
 
-        url = f"{self.base_url}/{endpoint}"
+        url = f"{base_url or self.base_url}/{endpoint}"
 
         for attempt in range(3):
             try:
@@ -50,9 +51,11 @@ class BaseFMPCrawler:
                         self.last_request_time = time.time()
 
                         if response.status == 200:
+                            # response can be empty, but if status is 200, it is legit response. For example,
+                            # requesting financial statements for a stock that's newly listed.
                             return await response.json()
                         else:
-                            error_msg = f"API request failed: {response.status} - {await response.text()}"
+                            error_msg = f"API request failed: {response.status} params: [{params}], Error {await response.text()}"
                             logging.error(f"URL: {url} - {error_msg}")
 
                         if attempt < 2:  # Don't sleep on last attempt
@@ -87,7 +90,7 @@ class BaseFMPCrawler:
         cursor = self.db.cursor()
         cursor.execute('''
             SELECT symbol FROM stock_symbol 
-            WHERE exchange_short_name IN ('NYSE', 'NASDAQ', 'AMEX')
-            AND type = 'stock'
+            WHERE exchange_short_name IN ('NYSE', 'NASDAQ', 'AMEX', 'OTC')
+                AND type = 'stock'
         ''')
         return [row['symbol'] for row in cursor.fetchall()]

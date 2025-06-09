@@ -12,7 +12,7 @@ class SymbolCrawler(BaseFMPCrawler):
         start_time = time.time()
 
         # Fetch symbols
-        symbols = await self.make_request('stock/list')
+        symbols = await self.make_request('stock/list', base_url='https://financialmodelingprep.com/api/v3')
         if not symbols:
             logging.error("Failed to fetch symbols")
             return
@@ -106,6 +106,7 @@ async def main():
 
 if __name__ == "__main__":
     #asyncio.run(main())
-    crawler = SymbolCrawler()
+    import sys
+    crawler = SymbolCrawler(db_path=sys.argv[1])
     crawler.backfill_sector_industry()
     crawler.close()
