@@ -8,7 +8,7 @@ def test_dataset_date_range_basic(test_db):
     # Test with a date range that includes all dates in the test database
     dataset = Dataset(
         symbol='AAPL',
-        metrics={'adjusted_close': 'price'},
+        metrics={'close': 'price'},
         start_date='2024-01-01',
         end_date='2024-01-02',
         db_path=test_db
@@ -30,7 +30,7 @@ def test_dataset_date_range_with_holes(test_db):
     """Test Dataset with a date range that has holes in the data."""
     dataset = Dataset(
         symbol='AAPL',
-        metrics={'adjusted_close': 'price'},
+        metrics={'close': 'price'},
         start_date='2024-01-01',
         end_date='2024-01-04',
         db_path=test_db
@@ -59,7 +59,7 @@ def test_dataset_date_range_multiple_symbols(test_db):
     # Test with multiple symbols
     dataset = Dataset(
         symbol=['AAPL', 'GOOGL'],
-        metrics={'adjusted_close': 'price'},
+        metrics={'close': 'price'},
         start_date='2024-01-01',
         end_date='2024-01-02',
         db_path=test_db
@@ -95,7 +95,7 @@ def test_dataset_date_range_with_holes_multiple_symbols(test_db):
     # Test with a date range that includes dates with no data for some symbols
     dataset = Dataset(
         symbol=['AAPL', 'GOOGL'],
-        metrics={'adjusted_close': 'price'},
+        metrics={'close': 'price'},
         start_date='2024-01-01',
         end_date='2024-01-03',
         db_path=test_db
@@ -132,7 +132,7 @@ def test_dataset_date_range_empty_result(test_db):
     # Test with a date range that has no data in the database
     dataset = Dataset(
         symbol='AAPL',
-        metrics={'adjusted_close': 'price'},
+        metrics={'close': 'price'},
         start_date='2023-01-01',
         end_date='2023-01-05',
         db_path=test_db

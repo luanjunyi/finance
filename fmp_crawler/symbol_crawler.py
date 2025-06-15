@@ -1,15 +1,12 @@
-import asyncio
 from fmp_crawler.base_fmp_crawler import BaseFMPCrawler
-from typing import List, Dict, Any
 import time
 import logging
-import yfinance as yf
+from tqdm import tqdm
 
 
 class SymbolCrawler(BaseFMPCrawler):
     async def crawl(self):
         logging.info("Starting symbol crawling...")
-        start_time = time.time()
 
         # Fetch symbols
         symbols = await self.make_request('stock/list', base_url='https://financialmodelingprep.com/api/v3')
@@ -46,15 +43,9 @@ class SymbolCrawler(BaseFMPCrawler):
 
         self.db.commit()
 
-        elapsed = time.time() - start_time
-        logging.info(f"Symbol crawling completed in {elapsed:.2f} seconds")
-
-    def backfill_sector_industry(self):
-        """Backfill sector and industry data using Yahoo Finance."""
+    async def backfill_sector_industry(self):
+        """Backfill sector and industry data using FMP API."""
         logging.info("Starting sector and industry backfill...")
-        start_time = time.time()
-        requests_per_second = 2
-        delay = 1.0 / requests_per_second
         
         cursor = self.db.cursor()
         # Get all symbols that need backfilling
@@ -65,48 +56,40 @@ class SymbolCrawler(BaseFMPCrawler):
         ''')
         symbols = [row[0] for row in cursor.fetchall()]
         logging.info(f"Found {len(symbols)} symbols to backfill")
-        for symbol in symbols:           
-            try:
-                logging.info(f"Updating sector and industry for {symbol}")
-                ticker = yf.Ticker(symbol)
-                info = ticker.info
-                sector = info.get('sector')
-                industry = info.get('industry')
+        
+        for symbol in tqdm(symbols):
+            # Fetch company profile from FMP API
+            profile_data = await self.make_request('profile', {'symbol': symbol})
+            
+            if not profile_data or len(profile_data) == 0:
+                logging.warning(f"No profile data found for {symbol}")
+                continue
                 
-                if sector or industry:
-                    cursor.execute('''
-                        UPDATE stock_symbol 
+            # FMP returns a list with one item for the profile
+            profile = profile_data[0]
+            sector = profile.get('sector')
+            industry = profile.get('industry')
+            
+            if sector or industry:
+                cursor.execute('''
+                    UPDATE stock_symbol 
                         SET sector = ?, industry = ?
                         WHERE symbol = ?
                     ''', (sector, industry, symbol))
                     
-                    logging.info(f"Updated {symbol}: sector={sector}, industry={industry}")
-                
-            except Exception as e:
-                logging.error(f"Error updating sector/industry for {symbol}: {str(e)}")
-                continue
-                
-            # Commit every 100 symbols to avoid holding transaction too long
-            if symbols.index(symbol) % 100 == 0:
+                # Commit immediately after each update
                 self.db.commit()
-
-            # Rate limiting
-            time.sleep(delay)
         
-        self.db.commit()
-        elapsed = time.time() - start_time
-        logging.info(f"Sector and industry backfill completed in {elapsed:.2f} seconds")
-
-
-async def main():
-    crawler = SymbolCrawler()
-    #await crawler.crawl()
-    crawler.backfill_sector_industry()
-    crawler.close()
+        logging.info("Completed backfilling sector and industry")
+    
 
 if __name__ == "__main__":
-    #asyncio.run(main())
     import sys
-    crawler = SymbolCrawler(db_path=sys.argv[1])
-    crawler.backfill_sector_industry()
-    crawler.close()
+    import asyncio
+    
+    async def main():
+        crawler = SymbolCrawler(db_path=sys.argv[1])
+        await crawler.backfill_sector_industry()
+        crawler.close()
+    
+    asyncio.run(main())

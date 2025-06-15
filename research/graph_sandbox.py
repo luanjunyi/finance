@@ -57,7 +57,7 @@ per_group_return_graph(d[d.price_to_fcf.between(0, 3)], 'price_to_ncav', 0.5, 0.
 
 # %%
 from fmp_data import Dataset
-ph = Dataset(symbol=d['symbol'].unique().tolist() + ['^SPX'] , metrics={'adjusted_close': 'price'}, start_date='2017-01-01', end_date='2019-12-31').get_data()
+ph = Dataset(symbol=d['symbol'].unique().tolist() + ['^SPX'] , metrics={'close': 'price'}, start_date='2017-01-01', end_date='2019-12-31').get_data()
 ph = ph.merge(d[['symbol', 'date', 'price_to_fcf', 'price_to_ncav', 'win_spx', 'opm_12m']], 
     on='symbol', how='left', suffixes=('_history', '_sample'))
 ph['color'] = np.where(ph['win_spx'] > 0, 'red', 'grey')
@@ -71,7 +71,7 @@ price_history_graph(ph, 'Operation margin > 20%')
 # %%
 d15 = data[data['date'] == '2014-12-31'].copy()
 d15 = d15[(d15.price_to_fcf > 0) & (d15.price_to_fcf < 2)]
-ph15 = Dataset(symbol=d15['symbol'].unique().tolist() + ['^SPX'] , metrics={'adjusted_close': 'price'}, start_date='2013-01-01', end_date='2015-12-31').get_data()
+ph15 = Dataset(symbol=d15['symbol'].unique().tolist() + ['^SPX'] , metrics={'close': 'price'}, start_date='2013-01-01', end_date='2015-12-31').get_data()
 ph15 = ph15.merge(d15[['symbol', 'date', 'price_to_fcf', 'price_to_ncav', 'win_spx', 'opm_12m', 'm12']], 
     on='symbol', how='left', suffixes=('_history', '_sample'))
 ph15['color'] = np.where(ph15['m12'].between(0, 0.05), 'red', 'grey')

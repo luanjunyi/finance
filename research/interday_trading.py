@@ -82,7 +82,7 @@ class InterdayTrading:
         """
         price_ds = Dataset(
             symbols,
-            metrics={'adjusted_close':'price'},
+            metrics={'close':'price'},
             for_date=current_date.strftime('%Y-%m-%d'),
             db_path=self.db_path
         )

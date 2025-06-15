@@ -15,7 +15,7 @@ def test_dataset_initialization(test_db):
             'total_equity': 'equity',
             'operating_cash_flow': 'op_cf',
             'free_cash_flow': 'fcf',
-            'roe': 'return_on_equity'
+            'return_on_equity': 'return_on_equity'
         },
         db_path=test_db
     )
@@ -127,7 +127,7 @@ def test_dataset_multiple_symbols(test_db, sample_symbols):
         metrics={
             'revenue': 'rev',
             'net_income': 'net_inc',
-            'roe': 'return_on_equity'
+            'return_on_equity': 'return_on_equity'
         },
         db_path=test_db
     )

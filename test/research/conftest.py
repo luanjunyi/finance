@@ -91,7 +91,7 @@ def trading_test_db():
             operating_cash_flow_per_share REAL,
             free_cash_flow_per_share REAL,
             book_value_per_share REAL,
-            roe REAL,
+            return_on_equity REAL,
             operating_profit_margin REAL,
             PRIMARY KEY (symbol, date)
         );
@@ -279,7 +279,7 @@ def trading_test_db():
         """INSERT INTO metrics (
             symbol, date, calendar_year, period,
             revenue_per_share, net_income_per_share, operating_cash_flow_per_share,
-            free_cash_flow_per_share, book_value_per_share, roe, operating_profit_margin
+            free_cash_flow_per_share, book_value_per_share, return_on_equity, operating_profit_margin
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         [
             # AAPL metrics - 2023

@@ -41,18 +41,18 @@ def test_db():
     # Insert sample data
     conn.executemany(
         """INSERT INTO daily_price (
-            symbol, date, open, high, low, close, adjusted_close, volume
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            symbol, date, open, high, low, close, volume
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)""",
         [
-            ('AAPL', '2024-01-01', 100.0, 105.0, 99.0, 102.0, 102.0, 1000000),
-            ('AAPL', '2024-01-02', 102.0, 106.0, 101.0, 105.0, 105.0, 1200000),
-            ('GOOGL', '2024-01-01', 150.0, 155.0, 149.0, 152.0, 152.0, 500000),
+            ('AAPL', '2024-01-01', 100.0, 105.0, 99.0, 102.0, 1000000),
+            ('AAPL', '2024-01-02', 102.0, 106.0, 101.0, 105.0, 1200000),
+            ('GOOGL', '2024-01-01', 150.0, 155.0, 149.0, 152.0, 500000),
         ]
     )
     
     conn.executemany(
         """INSERT INTO income_statement (
-            symbol, date, period, calendar_year, reported_currency,
+            symbol, date, period, fiscal_year, reported_currency,
             revenue, cost_of_revenue, gross_profit, operating_income,
             net_income, eps, eps_diluted
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
@@ -66,7 +66,7 @@ def test_db():
     
     conn.executemany(
         """INSERT INTO balance_sheet (
-            symbol, date, period, calendar_year, reported_currency,
+            symbol, date, period, fiscal_year, reported_currency,
             total_assets, total_current_assets, total_non_current_assets,
             total_liabilities, total_current_liabilities, total_non_current_liabilities,
             total_equity
@@ -81,23 +81,23 @@ def test_db():
 
     conn.executemany(
         """INSERT INTO cash_flow (
-            symbol, date, period, calendar_year, reported_currency,
+            symbol, date, period, fiscal_year, reported_currency,
             operating_cash_flow, capital_expenditure, free_cash_flow,
-            dividends_paid, net_income
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            net_income
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         [
             ('AAPL', '2024-01-01', 'FY', '2024', 'USD',
-             35000000, -5000000, 30000000, -2000000, 25000000),
+             35000000, -5000000, 30000000, 25000000),
             ('GOOGL', '2024-01-01', 'FY', '2024', 'USD',
-             28000000, -4000000, 24000000, 0, 20000000),
+             28000000, -4000000, 24000000, 20000000),
         ]
     )
 
     conn.executemany(
         """INSERT INTO metrics (
-            symbol, date, calendar_year, period,
+            symbol, date, fiscal_year, period,
             revenue_per_share, net_income_per_share, operating_cash_flow_per_share,
-            free_cash_flow_per_share, book_value_per_share, roe
+            free_cash_flow_per_share, book_value_per_share, return_on_equity
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         [
             ('AAPL', '2024-01-01', 2024, 'FY',
