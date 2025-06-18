@@ -157,7 +157,7 @@ class Dataset:
             FROM daily_price
             WHERE symbol IN ({symbol_placeholders})
             AND date BETWEEN ? AND ?
-            AND close > 0 AND volume > 0
+            AND close > 0 AND (volume > 0 OR symbol like '%^%')
             ORDER BY symbol, date
             """
             
