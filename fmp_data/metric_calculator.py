@@ -49,6 +49,33 @@ def operating_margin_ttm(data: pd.DataFrame) -> pd.Series:
     return operating_margin
 
 
+def eps_ttm(data: pd.DataFrame) -> pd.Series:
+    """
+    Calculate the earnings per share (EPS) TTM for a given symbol.
+    
+    Args:
+        data: DataFrame with required data. Columns: date, filing_date, net_income, weighted_average_shares_outstanding_diluted.
+        The rows are sorted by date in ascending order.
+        
+    Returns:
+        Series with the calculated EPS TTM
+    """
+    # Calculate rolling sum for net_income over 4 quarters
+    net_income_ttm = data['net_income'].rolling(window=4).sum()
+    
+    # Use the most recent shares_outstanding for each period
+    # This is the standard approach for TTM EPS calculation
+    shares_outstanding = data['weighted_average_shares_outstanding_diluted']
+    
+    # Calculate EPS TTM
+    eps = net_income_ttm / shares_outstanding
+    
+    # Replace divisions by zero with np.nan
+    eps = eps.replace([np.inf, -np.inf], np.nan)
+    
+    return eps
+
+
 DERIVED_METRICS = {
     'gross_margin_ttm': {
         'dependencies': ['revenue', 'cost_of_revenue'],
@@ -57,5 +84,9 @@ DERIVED_METRICS = {
     'operating_margin_ttm': {
         'dependencies': ['operating_income', 'revenue'],
         'function': operating_margin_ttm
+    },
+    'eps_ttm': {
+        'dependencies': ['net_income', 'weighted_average_shares_outstanding_diluted'],
+        'function': eps_ttm
     },
 }
