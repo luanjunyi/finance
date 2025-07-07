@@ -23,6 +23,7 @@ class Dataset:
 
     
     def __init__(self, symbols: Union[str, List[str]], metrics: List[str], start_date: str, end_date: str,
+                 with_price: bool = False,
                  db_path: str = '/Users/jluan/code/finance/data/fmp_data.db'):
         """
         Initialize the dataset.
@@ -39,6 +40,7 @@ class Dataset:
         self.metrics = metrics
         self.start_date = start_date
         self.end_date = end_date
+        self.with_price = with_price
         setup_global_logging()
         self.logger = logging.getLogger(__name__)
         self._plan_query() 
@@ -77,6 +79,10 @@ class Dataset:
             elif derived_df is not None:
                 symbol_df = pd.merge(symbol_df, derived_df, on=['symbol', 'filing_date'], how='outer')
             symbol_df = self.fill_date_gaps(symbol_df)
+            if self.with_price:
+                price_df = OfflineData.historical_tradable_price(symbol, self.start_date, self.end_date, db_path=self.db_path)
+                price_df['date'] = pd.to_datetime(price_df['date'])
+                symbol_df = pd.merge(symbol_df, price_df, on=['symbol', 'date'], how='left') 
             yield symbol, symbol_df
 
     def build(self) -> pd.DataFrame:

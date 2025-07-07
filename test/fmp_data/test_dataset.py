@@ -202,3 +202,55 @@ class TestDataset:
         
         # Verify the results
         assert filled_df.empty  # Should still be empty
+        
+    @patch('fmp_data.dataset.OfflineData')
+    def test_gen_with_price(self, mock_offline_data_class):
+        """Test generating dataset with price data when with_price=True."""
+        # Configure the mock for financial data
+        mock_instance = MagicMock()
+        mock_offline_data_class.return_value = mock_instance
+        
+        # Mock financial data
+        financial_df = pd.DataFrame({
+            'symbol': ['AAPL', 'AAPL'],
+            'date': pd.to_datetime(['2023-01-01', '2023-04-01']),
+            'filing_date': pd.to_datetime(['2023-01-15', '2023-04-15']),
+            'revenue': [100, 120]
+        })
+        
+        # Mock price data
+        price_df = pd.DataFrame({
+            'symbol': ['AAPL'] * 5,
+            'date': ['2023-01-01', '2023-01-02', '2023-01-03', '2023-01-04', '2023-01-05'],
+            'tradable_price': [150.0, 152.5, 151.0, 153.0, 155.0]
+        })
+        
+        # Set up the mock to return financial data for build
+        mock_instance.build.return_value = financial_df
+        
+        # Set up the mock for historical_tradable_price
+        mock_offline_data_class.historical_tradable_price = MagicMock(return_value=price_df)
+        
+        # Create dataset with with_price=True
+        dataset = Dataset(['AAPL'], ['revenue'], '2023-01-01', '2023-01-05', with_price=True)
+        
+        # Get the first (and only) result from the generator
+        symbol, df = next(dataset.gen())
+        
+        # Verify the results
+        assert symbol == 'AAPL'
+        assert 'revenue' in df.columns
+        assert 'tradable_price' in df.columns
+        assert len(df) == 5  # 5 days from Jan 1 to Jan 5
+        
+        # Check that price data is correctly merged
+        assert df[df['date'] == '2023-01-01']['tradable_price'].iloc[0] == 150.0
+        assert df[df['date'] == '2023-01-05']['tradable_price'].iloc[0] == 155.0
+        
+        # Check that financial data is correctly filled
+        assert df[df['date'] <= '2023-01-15']['revenue'].isna().all()
+        
+        # Verify that historical_tradable_price was called with correct parameters
+        mock_offline_data_class.historical_tradable_price.assert_called_once_with(
+            'AAPL', '2023-01-01', '2023-01-05', db_path=dataset.db_path
+        )
