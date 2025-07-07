@@ -1,6 +1,6 @@
 import pytest
 import pandas as pd
-from fmp_data import Dataset, FMPPriceLoader, BEFORE_PRICE, AFTER_PRICE
+from fmp_data_legacy import Dataset, FMPPriceLoader, BEFORE_PRICE, AFTER_PRICE
 
 
 def test_dataset_initialization(test_db):

@@ -4,7 +4,7 @@ import pandas as pd
 import logging
 from datetime import datetime, date, timedelta
 from tqdm import tqdm
-from fmp_data import FMPPriceLoader, Dataset
+from fmp_data_legacy import FMPPriceLoader, Dataset
 import numpy as np
 
 

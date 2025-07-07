@@ -1,6 +1,6 @@
 import pytest
 import pandas as pd
-from fmp_data import Dataset
+from fmp_data_legacy import Dataset
 
 
 def test_dataset_date_range_basic(test_db):
