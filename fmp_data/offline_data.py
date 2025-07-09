@@ -185,3 +185,48 @@ class OfflineData:
                 result = pd.merge(result, df, on='filing_date', how='outer')
             
             yield symbol, result
+    
+    @classmethod
+    def historical_tradable_price(cls, symbol: str, start_date: str, end_date: str, db_path: str = '/Users/jluan/code/finance/data/fmp_data.db'):
+        """Get historical tradable price for a symbol in a date range.
+        
+        If there are gaps in the price data (days without data), the method will fill
+        these gaps using the last available price data.
+        """
+        with sqlite3.connect(f'file:{db_path}?mode=ro', uri=True) as conn:
+            query = """
+            SELECT symbol, date, high, low
+            FROM daily_price
+            WHERE symbol = ?
+            AND date BETWEEN ? AND ?
+            ORDER BY date
+            """
+            params = [symbol, start_date, end_date]
+            df = pd.read_sql_query(query, conn, params=tuple(params))
+            
+            if df.empty:
+                return df
+            
+            # Calculate tradable price as average of high and low
+            df['tradable_price'] = df.apply(lambda row: (row['high'] + row['low']) / 2, axis=1)
+            df.drop(columns=['high', 'low'], inplace=True)
+            
+            # Create a continuous date range to fill gaps
+            date_range = pd.date_range(start=start_date, end=end_date, freq='D')
+            template = pd.DataFrame({'date': date_range})
+            template['symbol'] = symbol
+            
+            # Convert date columns to datetime for proper merging
+            df['date'] = pd.to_datetime(df['date'])
+            template['date'] = pd.to_datetime(template['date'])
+            
+            # Merge with the template to include all dates
+            merged = pd.merge(template, df, on=['symbol', 'date'], how='left')
+            
+            # Forward fill the tradable_price column to use last available price for gaps
+            merged['tradable_price'] = merged['tradable_price'].ffill()
+            
+            # Convert date back to string format for consistency
+            merged['date'] = merged['date'].dt.strftime('%Y-%m-%d')
+            
+            return merged
