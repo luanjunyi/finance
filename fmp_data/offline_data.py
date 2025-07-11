@@ -230,3 +230,14 @@ class OfflineData:
             merged['date'] = merged['date'].dt.strftime('%Y-%m-%d')
             
             return merged
+
+    @classmethod
+    def get_us_active_stocks(cls, db_path: str = '/Users/jluan/code/finance/data/fmp_data.db') -> List[str]:
+        with sqlite3.connect(f'file:{db_path}?mode=ro', uri=True) as conn:
+            query = """
+            SELECT symbol
+            FROM valid_us_stocks_der
+            """
+            df = pd.read_sql_query(query, conn)
+            return df['symbol'].tolist()
+        

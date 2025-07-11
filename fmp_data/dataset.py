@@ -8,6 +8,7 @@ for accessing financial metrics, either from the database or by calculation.
 import logging
 from typing import List, Union
 import pandas as pd
+import numpy as np
 
 from fmp_data.offline_data import OfflineData
 from fmp_data.metric_calculator import DERIVED_METRICS
@@ -41,7 +42,6 @@ class Dataset:
         self.start_date = start_date
         self.end_date = end_date
         self.with_price = with_price
-        setup_global_logging()
         self.logger = logging.getLogger(__name__)
         self._plan_query() 
 
@@ -72,8 +72,12 @@ class Dataset:
                 data_source = OfflineData(symbol, list(self.dependencies), db_path=self.db_path).build().sort_values('filing_date', ascending=True)
                 derived_df = data_source[['symbol', 'filing_date']].copy()
                 for metric in self.derived_metrics:
-                    metric_series = DERIVED_METRICS[metric]['function'](data_source)
-                    derived_df[metric] = metric_series
+                    try:
+                        metric_series = DERIVED_METRICS[metric]['function'](data_source)
+                        derived_df[metric] = metric_series
+                    except Exception as e:
+                        self.logger.error(f"Error calculating {metric} for {symbol}: {e}")
+                        derived_df[metric] = np.nan
             if symbol_df is None:
                 symbol_df = derived_df
             elif derived_df is not None:

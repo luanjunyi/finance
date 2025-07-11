@@ -7,7 +7,7 @@ This module tests the metric calculation functions in the metric_calculator modu
 import pytest
 import pandas as pd
 import numpy as np
-from fmp_data.metric_calculator import *, eps_ttm
+from fmp_data.metric_calculator import *
 
 
 class TestRatioMetric:

@@ -289,6 +289,19 @@ def capex_to_operating_income_ttm(data: pd.DataFrame) -> pd.Series:
     """
     return ratio_metric(data, 'capital_expenditure', 'operating_income', 4)
 
+def net_income_margin_ttm(data: pd.DataFrame) -> pd.Series:
+    """
+    Calculate the net income margin trailing twelve months (TTM).
+    
+    Args:
+        data: DataFrame with required data. Columns: date, filing_date, net_income, revenue.
+        The rows are sorted by date in ascending order.
+        
+    Returns:
+        Series with the calculated net income margin TTM
+    """
+    return ratio_metric(data, 'net_income', 'revenue', 4)
+
 DERIVED_METRICS = {
     'eps_ttm': {
         'dependencies': ['net_income', 'weighted_average_shares_outstanding_diluted'],
@@ -317,6 +330,10 @@ DERIVED_METRICS = {
     'interest_payment_to_operating_income_ttm': {
         'dependencies': ['net_interest_income', 'operating_income'],
         'function': interest_payment_to_operating_income_ttm
+    },
+    'net_income_margin_ttm': {
+        'dependencies': ['net_income', 'revenue'],
+        'function': net_income_margin_ttm
     },
     'net_earning_yoy_growth': {
         'dependencies': ['net_income'],
