@@ -557,5 +557,40 @@ class TestMetricCalculator:
         assert pytest.approx(result.iloc[2]) == expected_2
         assert pytest.approx(result.iloc[3]) == expected_3
         assert pytest.approx(result.iloc[4]) == expected_4
+        
+    def test_fcf_per_share_ttm(self):
+        """Test calculation of free cash flow per share TTM with changing share counts."""
+        # Create test data with changing share counts
+        data = pd.DataFrame({
+            'date': pd.to_datetime(['2021-12-31', '2022-03-31', '2022-06-30', '2022-09-30', '2022-12-31']),
+            'filing_date': pd.to_datetime(['2022-01-15', '2022-04-15', '2022-07-15', '2022-10-15', '2023-01-15']),
+            'free_cash_flow': [100.0, 120.0, 140.0, 160.0, 180.0],
+            'weighted_average_shares_outstanding_diluted': [40.0, 45.0, 50.0, 55.0, 60.0]  # Increasing share count
+        })
+        
+        # Calculate FCF per share TTM
+        result = fcf_per_share_ttm(data)
+        
+        # Expected values for the last two rows
+        # For index 3: free_cash_flow_ttm = 100.0 + 120.0 + 140.0 + 160.0 = 520.0
+        # weighted_average_shares_outstanding_diluted = 55.0
+        # fcf_per_share = 520.0 / 55.0 = 9.45...
+        expected_3 = (100.0 + 120.0 + 140.0 + 160.0) / 55.0
+        
+        # For index 4: free_cash_flow_ttm = 120.0 + 140.0 + 160.0 + 180.0 = 600.0
+        # weighted_average_shares_outstanding_diluted = 60.0
+        # fcf_per_share = 600.0 / 60.0 = 10.0
+        expected_4 = (120.0 + 140.0 + 160.0 + 180.0) / 60.0
+        
+        # Check results
+        assert pytest.approx(result.iloc[3]) == expected_3
+        assert pytest.approx(result.iloc[4]) == expected_4
+
+        # First 3 rows should be NaN (not enough data for TTM)
+        assert np.isnan(result.iloc[0])
+        assert np.isnan(result.iloc[1])
+        assert np.isnan(result.iloc[2])        
+        
+
 
 

@@ -109,13 +109,22 @@ class FMPOnline:
         
         all_data = []
         for symbol in tqdm(symbols):
-            prices = self.api.get_prices(symbol, start_date, end_date)
-            for price in prices:
-                all_data.append({
-                        'symbol': price['symbol'],
-                        'date': price['date'],
-                        'close_price': price['adjClose']
-                    })
+            if symbol.startswith('^'):
+                prices = self.api.index_prices(symbol, start_date, end_date)
+                for price in prices:
+                    all_data.append({
+                            'symbol': price['symbol'],
+                            'date': price['date'],
+                            'close_price': price['price']
+                    })                  
+            else:                
+                prices = self.api.get_prices(symbol, start_date, end_date)
+                for price in prices:
+                    all_data.append({
+                            'symbol': price['symbol'],
+                            'date': price['date'],
+                            'close_price': price['adjClose']
+                    })  
         
         df = pd.DataFrame(all_data)
         df['date'] = pd.to_datetime(df['date'])

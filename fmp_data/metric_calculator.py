@@ -302,6 +302,24 @@ def net_income_margin_ttm(data: pd.DataFrame) -> pd.Series:
     """
     return ratio_metric(data, 'net_income', 'revenue', 4)
 
+def fcf_per_share_ttm(data: pd.DataFrame) -> pd.Series:
+    """
+    Calculate the free cash flow per share trailing twelve months (TTM).
+    
+    Args:
+        data: DataFrame with required data. Columns: date, filing_date, free_cash_flow, weighted_average_shares_outstanding_diluted.
+        The rows are sorted by date in ascending order.
+        
+    Returns:
+        Series with the calculated free cash flow per share TTM
+    """
+    fcf_per_share = data['free_cash_flow'].rolling(window=4).sum() / data['weighted_average_shares_outstanding_diluted']
+    
+    # Replace divisions by zero with np.nan
+    fcf_per_share = fcf_per_share.replace([np.inf, -np.inf], np.nan)
+    
+    return fcf_per_share
+
 DERIVED_METRICS = {
     'eps_ttm': {
         'dependencies': ['net_income', 'weighted_average_shares_outstanding_diluted'],
@@ -362,5 +380,9 @@ DERIVED_METRICS = {
     'capex_to_operating_income_ttm': {
         'dependencies': ['capital_expenditure', 'operating_income'],
         'function': capex_to_operating_income_ttm
+    },
+    'fcf_per_share_ttm': {
+        'dependencies': ['free_cash_flow', 'weighted_average_shares_outstanding_diluted'],
+        'function': fcf_per_share_ttm
     }
 }

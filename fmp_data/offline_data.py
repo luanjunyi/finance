@@ -205,7 +205,7 @@ class OfflineData:
             df = pd.read_sql_query(query, conn, params=tuple(params))
             
             if df.empty:
-                return df
+                return df.drop(columns=['high', 'low'])
             
             # Calculate tradable price as average of high and low
             df['tradable_price'] = df.apply(lambda row: (row['high'] + row['low']) / 2, axis=1)
