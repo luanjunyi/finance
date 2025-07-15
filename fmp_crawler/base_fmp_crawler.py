@@ -1,4 +1,3 @@
-import os
 import time
 import logging
 import aiohttp
@@ -7,14 +6,13 @@ import sqlite3
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
 from utils.logging_config import setup_logging as setup_global_logging
+from utils.config import FMP_API_KEY
 
 
 class BaseFMPCrawler:
     def __init__(self, db_path: str):
         self.skip_existing = True
-        self.api_key = os.getenv('FMP_API_KEY')
-        if not self.api_key:
-            raise ValueError("FMP_API_KEY environment variable not set")
+        self.api_key = FMP_API_KEY
 
         self.base_url = "https://financialmodelingprep.com/stable"
         self.last_request_time = 0

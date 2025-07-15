@@ -5,6 +5,7 @@ from datetime import datetime, date, timedelta
 import logging
 from typing import List, Dict, Union
 import sqlite3
+from utils.config import FMP_DB_PATH
 
 
 BEFORE_PRICE = 'before_price'
@@ -13,7 +14,7 @@ PRICE_METRICS = {BEFORE_PRICE, AFTER_PRICE}
 
 class Dataset:
     def __init__(self, symbol: Union[str, List[str]], metrics: Dict[str, str], for_date: Union[str, List[str]] = None, 
-                 start_date: str = None, end_date: str = None, db_path: str = '/Users/jluan/code/finance/data/fmp_data.db'):
+                 start_date: str = None, end_date: str = None, db_path: str = FMP_DB_PATH):
         """Initialize Dataset object.
         
         Args:
@@ -274,13 +275,13 @@ class Dataset:
 
 
 class FMPPriceLoader:
-    def __init__(self, price_tolerance_days: int = 4, db_path: str = '/Users/jluan/code/finance/data/fmp_data.db'):
+    def __init__(self, price_tolerance_days: int = 4, db_path: str = FMP_DB_PATH):
         """Initialize database connection
 
         Args:
             price_tolerance_days (int): Maximum number of days to search for a price when given date has no data. Used
                 in get_last_available_price and get_next_available_price
-            db_path (str): Path to the SQLite database file. Defaults to '/Users/jluan/code/finance/data/fmp_data.db'
+            db_path (str): Path to the SQLite database file. Defaults to the value from config module
 
         Raises:
             FileNotFoundError: If the database file doesn't exist
@@ -624,6 +625,6 @@ class FMPPriceLoader:
         return set(row['symbol'] for row in self.cursor.fetchall())        
 
 def fmp(sql):
-    db = sqlite3.connect('/Users/jluan/code/finance/data/fmp_data.db')
+    db = sqlite3.connect(FMP_DB_PATH)
     df = pd.read_sql_query(sql, db)
     return df        

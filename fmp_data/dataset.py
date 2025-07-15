@@ -13,6 +13,7 @@ import numpy as np
 from fmp_data.offline_data import OfflineData
 from fmp_data.metric_calculator import DERIVED_METRICS
 from utils.logging_config import setup_logging as setup_global_logging
+from utils.config import FMP_DB_PATH
 
 class Dataset:
     """
@@ -25,7 +26,7 @@ class Dataset:
     
     def __init__(self, symbols: Union[str, List[str]], metrics: List[str], start_date: str, end_date: str,
                  with_price: bool = False,
-                 db_path: str = '/Users/jluan/code/finance/data/fmp_data.db'):
+                 db_path: str = FMP_DB_PATH):
         """
         Initialize the dataset.
         

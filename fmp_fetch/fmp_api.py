@@ -1,4 +1,3 @@
-import os
 import time
 import logging
 import requests
@@ -6,6 +5,7 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 from functools import cache
 from utils.logging_config import setup_logging as setup_global_logging
+from utils.config import FMP_API_KEY
 
 
 class FMPAPI:
@@ -14,9 +14,7 @@ class FMPAPI:
     This class provides synchronous versions of the functions used in fmp_crawler.
     """
     def __init__(self):
-        self.api_key = os.getenv('FMP_API_KEY')
-        if not self.api_key:
-            raise ValueError("FMP_API_KEY environment variable not set")
+        self.api_key = FMP_API_KEY
 
         self.base_url = "https://financialmodelingprep.com/stable"
         self.last_request_time = 0
