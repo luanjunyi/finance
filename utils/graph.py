@@ -32,11 +32,14 @@ def per_group_return_graph(data, cut_column, min_value, max_value, num_bins=40, 
     plt.figure(figsize=(20, 8))
     bars = plt.bar(y[cut_column], y['return'], edgecolor='black')
     plt.plot(y[cut_column], y['win_spx'], '-o', color='#0c1ef2', linewidth=1, markersize=7, zorder=3)
+    plt.legend([bars.get_children()[0], plt.gca().get_lines()[0]], 
+               ['Actual Return', 'Return minus SPX'], 
+               loc='best')    
 
     for i, bar in enumerate(bars):
         plt.text(bar.get_x() + bar.get_width()/2, 
                 0.001, 
-                f'n={y["symbol"].iloc[i]} | r = {y["return"].iloc[i] * 100:.2f}%', 
+                f'{y[cut_column].iloc[i]} | n={y["symbol"].iloc[i]} | r = {y["return"].iloc[i] * 100:.2f}%', 
                 ha='center', 
                 va='bottom', 
                 rotation=90, 
@@ -45,6 +48,8 @@ def per_group_return_graph(data, cut_column, min_value, max_value, num_bins=40, 
     plt.xticks(rotation=90)
     plt.ylabel("Net Return")
     plt.title(f"{cut_column} and price return, spx average return {data['spx_return'].mean() * 100:.2f}% | {extra_title}")
+
+
     plt.show()
     
 

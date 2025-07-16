@@ -82,6 +82,8 @@ class Dataset:
                 symbol_df = derived_df
             elif derived_df is not None:
                 symbol_df = pd.merge(symbol_df, derived_df, on=['symbol', 'filing_date'], how='outer')
+            if symbol_df.empty:
+                continue
             symbol_df = self.fill_date_gaps(symbol_df)
             if self.with_price:
                 price_df = OfflineData.historical_tradable_price(symbol, self.start_date, self.end_date, db_path=self.db_path)
