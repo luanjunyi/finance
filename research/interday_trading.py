@@ -6,10 +6,11 @@ from datetime import datetime, date, timedelta
 from tqdm import tqdm
 from fmp_data_legacy import FMPPriceLoader, Dataset
 import numpy as np
+from utils.config import FMP_DB_PATH
 
 
 class InterdayTrading:
-    def __init__(self, begin_date: str, end_date: str, db_path: str = '/Users/jluan/code/finance/data/fmp_data.db'):
+    def __init__(self, begin_date: str, end_date: str, db_path: str = FMP_DB_PATH):
         """
         Initialize InterdayTrading with date range and load valid stocks.
         Args:

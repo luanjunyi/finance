@@ -2,8 +2,10 @@ import pytest
 import tempfile
 import sqlite3
 import os
+import sys
+from utils.config import FMP_DB_PATH
 
-PRODUCTION_DB_PATH = '/Users/jluan/code/finance/data/fmp_data.db'
+PRODUCTION_DB_PATH = FMP_DB_PATH
 
 def get_production_schema():
     """Get schema from production database."""

@@ -45,5 +45,6 @@ ENV/
 
 # Project specific
 missing_data.log
-fmp_data.db 
+research/local/*
 .coverage
+

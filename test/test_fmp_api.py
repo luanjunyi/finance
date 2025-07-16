@@ -1,15 +1,42 @@
 
 import pytest
+import sys
 from unittest.mock import patch, MagicMock
 
-from fmp_fetch.fmp_api import FMPAPI
+# We'll use monkeypatch to set environment variables before importing modules
+
+
+@pytest.fixture(autouse=True)
+def mock_config(monkeypatch):
+    """Mock the config module to avoid environment variable dependencies."""
+    # Set environment variables for testing
+    monkeypatch.setenv('FMP_DB_PATH', '/test/path/to/db.sqlite')
+    monkeypatch.setenv('FMP_API_KEY', 'test_api_key')
+    
+    # If the modules are already imported, remove them to ensure fresh imports
+    for module in ['utils.config', 'fmp_fetch.fmp_api']:
+        if module in sys.modules:
+            del sys.modules[module]
+    
+    # Now we can safely import
+    import utils.config
+    import fmp_fetch.fmp_api
+    from fmp_fetch.fmp_api import FMPAPI
+    
+    # Make these available to the tests
+    return {
+        'config': utils.config,
+        'fmp_api': fmp_fetch.fmp_api,
+        'FMPAPI': FMPAPI
+    }
 
 
 @pytest.fixture
-def mock_fmp_api():
+def mock_fmp_api(mock_config):
     """Create a FMPAPI instance with mocked API responses."""
-    with patch.dict('os.environ', {'FMP_API_KEY': 'dummy_key'}), \
-         patch('fmp_fetch.fmp_api.requests.get') as mock_get:
+    FMPAPI = mock_config['FMPAPI']
+    
+    with patch('fmp_fetch.fmp_api.requests.get') as mock_get:
         
         # Setup mock response
         mock_response = MagicMock()
@@ -23,19 +50,27 @@ def mock_fmp_api():
         yield fmp, mock_get
 
 
-def test_initialization():
-    """Test FMPAPI initialization with environment variable."""
-    with patch.dict('os.environ', {'FMP_API_KEY': 'test_key'}):
-        fmp = FMPAPI()
-        assert fmp.api_key == 'test_key'
-        assert fmp.base_url == "https://financialmodelingprep.com/stable"
+def test_initialization(mock_config):
+    """Test FMPAPI initialization with config module."""
+    FMPAPI = mock_config['FMPAPI']
+    fmp = FMPAPI()
+    assert fmp.api_key == 'test_api_key'
+    assert fmp.base_url == "https://financialmodelingprep.com/stable"
 
 
-def test_initialization_missing_api_key():
+def test_initialization_missing_api_key(monkeypatch):
     """Test FMPAPI initialization with missing API key."""
-    with patch.dict('os.environ', {'FMP_API_KEY': ''}, clear=True):
-        with pytest.raises(ValueError, match="FMP_API_KEY environment variable not set"):
-            FMPAPI()
+    # Clear the API_KEY but keep the DB_PATH
+    monkeypatch.delenv('FMP_API_KEY', raising=False)
+    
+    # Clear the modules to force reimport
+    for module in ['utils.config', 'fmp_fetch.fmp_api']:
+        if module in sys.modules:
+            del sys.modules[module]
+    
+    # Now try to import, which should fail
+    with pytest.raises(ValueError, match="Mandatory environment variable FMP_API_KEY is not set"):
+        import utils.config
 
 
 def test_get_prices(mock_fmp_api):
@@ -59,7 +94,11 @@ def test_get_prices(mock_fmp_api):
     mock_get.assert_called_once()
     args, kwargs = mock_get.call_args
     assert args[0] == "https://financialmodelingprep.com/stable/historical-price-eod/dividend-adjusted"
-    assert kwargs['params'] == {'symbol': 'AAPL', 'from': '2024-01-01', 'to': '2024-01-02', 'apikey': 'dummy_key'}
+    params = kwargs['params']
+    assert params['symbol'] == 'AAPL'
+    assert params['from'] == '2024-01-01'
+    assert params['to'] == '2024-01-02'
+    assert params['apikey'] == 'test_api_key'
 
 
 def test_get_ratios(mock_fmp_api):
@@ -83,7 +122,11 @@ def test_get_ratios(mock_fmp_api):
     mock_get.assert_called_once()
     args, kwargs = mock_get.call_args
     assert args[0] == "https://financialmodelingprep.com/stable/ratios"
-    assert kwargs['params'] == {'symbol': 'AAPL', 'period': 'quarter', 'limit': 120, 'apikey': 'dummy_key'}
+    params = kwargs['params']
+    assert params['symbol'] == 'AAPL'
+    assert params['period'] == 'quarter'
+    assert params['limit'] == 120
+    assert params['apikey'] == 'test_api_key'
 
 
 def test_get_ratios_with_custom_params(mock_fmp_api):
@@ -107,4 +150,8 @@ def test_get_ratios_with_custom_params(mock_fmp_api):
     mock_get.assert_called_once()
     args, kwargs = mock_get.call_args
     assert args[0] == "https://financialmodelingprep.com/stable/ratios"
-    assert kwargs['params'] == {'symbol': 'AAPL', 'period': 'annual', 'limit': 10, 'apikey': 'dummy_key'}
+    params = kwargs['params']
+    assert params['symbol'] == 'AAPL'
+    assert params['period'] == 'annual'
+    assert params['limit'] == 10
+    assert params['apikey'] == 'test_api_key'

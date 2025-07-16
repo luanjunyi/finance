@@ -11,10 +11,11 @@ from datetime import datetime, date, timedelta
 from typing import Dict, List, Any, Optional, Union, Set, Tuple
 import pandas as pd
 import sqlite3
+from utils.config import FMP_DB_PATH
 
 class OfflineData:
     def __init__(self, symbol: Union[str, List[str]], metrics: List[str], for_date: Union[str, List[str]] = None, 
-                 start_date: str = None, end_date: str = None, db_path: str = '/Users/jluan/code/finance/data/fmp_data.db'):
+                 start_date: str = None, end_date: str = None, db_path: str = FMP_DB_PATH):
         """Initialize Dataset object.
         
         Args:
@@ -187,7 +188,7 @@ class OfflineData:
             yield symbol, result
     
     @classmethod
-    def historical_tradable_price(cls, symbol: str, start_date: str, end_date: str, db_path: str = '/Users/jluan/code/finance/data/fmp_data.db'):
+    def historical_tradable_price(cls, symbol: str, start_date: str, end_date: str, db_path: str = FMP_DB_PATH):
         """Get historical tradable price for a symbol in a date range.
         
         If there are gaps in the price data (days without data), the method will fill
@@ -232,7 +233,7 @@ class OfflineData:
             return merged
 
     @classmethod
-    def get_us_active_stocks(cls, db_path: str = '/Users/jluan/code/finance/data/fmp_data.db') -> List[str]:
+    def get_us_active_stocks(cls, db_path: str = FMP_DB_PATH) -> List[str]:
         with sqlite3.connect(f'file:{db_path}?mode=ro', uri=True) as conn:
             query = """
             SELECT symbol

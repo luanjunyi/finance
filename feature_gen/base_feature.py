@@ -3,6 +3,7 @@ from fmp_data import FMPPriceLoader
 import pandas as pd
 from typing import Optional, Dict, List
 import sqlite3
+from utils.config import FMP_DB_PATH
 from datetime import datetime
 import numpy as np
 from fmp_data import Dataset
@@ -37,7 +38,7 @@ class FinancialFeatureBase(ABC):
     including database access, symbol retrieval, and sector quantile calculation.
     """
     
-    def __init__(self, db_path: str = '/Users/jluan/code/finance/data/fmp_data.db'):
+    def __init__(self, db_path: str = FMP_DB_PATH):
         """
         Initialize the feature generator.
         
