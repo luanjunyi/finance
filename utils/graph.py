@@ -10,6 +10,8 @@ def per_group_return_graph(data, cut_column, min_value, max_value, num_bins=40, 
     assert 'win_spx' in data.columns
     assert 'symbol' in data.columns
 
+    assert sum(data[cut_column].between(min_value, max_value)) > 0, f"No data in {cut_column} between {min_value} and {max_value}"
+
     NUM_BINS = num_bins
     data = data[data[cut_column].between(min_value, max_value)].copy().reset_index(drop=True)
     data = data.replace([np.inf, -np.inf], np.nan)
@@ -29,7 +31,7 @@ def per_group_return_graph(data, cut_column, min_value, max_value, num_bins=40, 
     x = pd.cut(data[cut_column], bins=NUM_BINS, labels=labels)
     y = data.groupby(x, observed=False).agg({"spx_return": "mean", "return": "mean", "symbol": "count", "win_spx": "mean"}).reset_index()
 
-    plt.figure(figsize=(20, 8))
+    plt.figure(figsize=(50, 8))
     bars = plt.bar(y[cut_column], y['return'], edgecolor='black')
     plt.plot(y[cut_column], y['win_spx'], '-o', color='#0c1ef2', linewidth=1, markersize=7, zorder=3)
     plt.legend([bars.get_children()[0], plt.gca().get_lines()[0]], 

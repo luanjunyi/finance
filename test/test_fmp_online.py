@@ -186,3 +186,181 @@ def test_get_close_prices_during(mock_fmp_online):
     assert result.iloc[3]['symbol'] == 'MSFT'
     assert result.iloc[3]['date'] == pd.Timestamp('2024-01-01')
     assert result.iloc[3]['close_price'] == 199.0
+
+
+def test_realtime_batch_price_quote_small_batch(mock_fmp_online):
+    """Test the realtime_batch_price_quote method with a small batch of symbols."""
+    fmp, mock_api = mock_fmp_online
+    
+    # Setup mock price quote data
+    mock_quotes = [
+        {"symbol": "AAPL", "price": 200.0, "change": 1.5, "volume": 1000000},
+        {"symbol": "MSFT", "price": 300.0, "change": 2.0, "volume": 500000}
+    ]
+    
+    # Configure mock to return our mock data
+    mock_api.batch_price_quote.return_value = mock_quotes
+    
+    # Call the method with a small batch that doesn't need splitting
+    result = fmp.realtime_batch_price_quote(['AAPL', 'MSFT'])
+    
+    # Verify the API call was made correctly
+    mock_api.batch_price_quote.assert_called_once_with(['AAPL', 'MSFT'])
+    
+    # Verify the result is a DataFrame with the expected structure
+    assert isinstance(result, pd.DataFrame)
+    assert set(result.columns) == {'symbol', 'current_price'}
+    
+    # Verify the DataFrame contains the expected data
+    assert len(result) == 2
+    
+    # Check the values
+    assert result.loc[result['symbol'] == 'AAPL', 'current_price'].values[0] == 200.0
+    assert result.loc[result['symbol'] == 'MSFT', 'current_price'].values[0] == 300.0
+
+
+def test_realtime_batch_price_quote_large_batch(mock_fmp_online):
+    """Test the realtime_batch_price_quote method with a large batch of symbols that needs splitting."""
+    fmp, mock_api = mock_fmp_online
+    
+    # Create a large list of symbols that exceeds the batch size
+    symbols = [f"SYMBOL{i}" for i in range(1, 1202)]  # 1201 symbols
+    
+    # Setup mock price quote data for first batch
+    mock_quotes_batch1 = [{"symbol": f"SYMBOL{i}", "price": float(i), "change": 0.1, "volume": 1000} for i in range(1, 1001)]
+    
+    # Setup mock price quote data for second batch
+    mock_quotes_batch2 = [{"symbol": f"SYMBOL{i}", "price": float(i), "change": 0.1, "volume": 1000} for i in range(1001, 1202)]
+    
+    # Configure mock to return different data for different batches
+    mock_api.batch_price_quote.side_effect = [mock_quotes_batch1, mock_quotes_batch2]
+    
+    # Mock tqdm to return the original iterable
+    with patch('fmp_fetch.fmp_online.tqdm', lambda x, **kwargs: x):
+        result = fmp.realtime_batch_price_quote(symbols)
+    
+    # Verify the API calls were made correctly
+    assert mock_api.batch_price_quote.call_count == 2
+    mock_api.batch_price_quote.assert_any_call(symbols[:1000])
+    mock_api.batch_price_quote.assert_any_call(symbols[1000:])
+    
+    # Verify the result is a DataFrame with the expected structure
+    assert isinstance(result, pd.DataFrame)
+    assert set(result.columns) == {'symbol', 'current_price'}
+    
+    # Verify the DataFrame contains the expected data
+    assert len(result) == 1201
+    
+    # Check some values
+    assert result.loc[result['symbol'] == 'SYMBOL1', 'current_price'].values[0] == 1.0
+    assert result.loc[result['symbol'] == 'SYMBOL1000', 'current_price'].values[0] == 1000.0
+    assert result.loc[result['symbol'] == 'SYMBOL1201', 'current_price'].values[0] == 1201.0
+
+
+def test_realtime_batch_price_quote_api_failure(mock_fmp_online):
+    """Test the realtime_batch_price_quote method when the API call fails."""
+    fmp, mock_api = mock_fmp_online
+    
+    # Configure mock to return None (API failure)
+    mock_api.batch_price_quote.return_value = None
+    
+    # Call the method
+    with patch('fmp_fetch.fmp_online.tqdm', lambda x, **kwargs: x):
+        result = fmp.realtime_batch_price_quote(['AAPL', 'MSFT'])
+    
+    # Verify the API call was made
+    mock_api.batch_price_quote.assert_called_once_with(['AAPL', 'MSFT'])
+    
+    # Verify the result is an empty DataFrame with the expected columns
+    assert isinstance(result, pd.DataFrame)
+    assert set(result.columns) == {'symbol', 'current_price'}
+    assert len(result) == 0
+
+
+def test_realtime_batch_market_cap_small_batch(mock_fmp_online):
+    """Test the realtime_batch_market_cap method with a small batch of symbols."""
+    fmp, mock_api = mock_fmp_online
+    
+    # Setup mock market cap data
+    mock_market_caps = [
+        {"symbol": "AAPL", "marketCap": 2000000000000.0},
+        {"symbol": "MSFT", "marketCap": 1800000000000.0}
+    ]
+    
+    # Configure mock to return our mock data
+    mock_api.batch_market_cap.return_value = mock_market_caps
+    
+    # Call the method with a small batch that doesn't need splitting
+    result = fmp.realtime_batch_market_cap(['AAPL', 'MSFT'])
+    
+    # Verify the API call was made correctly
+    mock_api.batch_market_cap.assert_called_once_with(['AAPL', 'MSFT'])
+    
+    # Verify the result is a DataFrame with the expected structure
+    assert isinstance(result, pd.DataFrame)
+    assert set(result.columns) == {'symbol', 'market_cap'}
+    
+    # Verify the DataFrame contains the expected data
+    assert len(result) == 2
+    
+    # Check the values
+    assert result.loc[result['symbol'] == 'AAPL', 'market_cap'].values[0] == 2000000000000.0
+    assert result.loc[result['symbol'] == 'MSFT', 'market_cap'].values[0] == 1800000000000.0
+
+
+def test_realtime_batch_market_cap_large_batch(mock_fmp_online):
+    """Test the realtime_batch_market_cap method with a large batch of symbols that needs splitting."""
+    fmp, mock_api = mock_fmp_online
+    
+    # Create a large list of symbols that exceeds the batch size
+    symbols = [f"SYMBOL{i}" for i in range(1, 1202)]  # 1201 symbols
+    
+    # Setup mock market cap data for first batch
+    mock_market_caps_batch1 = [{"symbol": f"SYMBOL{i}", "marketCap": float(i) * 1000000000} for i in range(1, 1001)]
+    
+    # Setup mock market cap data for second batch
+    mock_market_caps_batch2 = [{"symbol": f"SYMBOL{i}", "marketCap": float(i) * 1000000000} for i in range(1001, 1202)]
+    
+    # Configure mock to return different data for different batches
+    mock_api.batch_market_cap.side_effect = [mock_market_caps_batch1, mock_market_caps_batch2]
+    
+    # Call the method
+    with patch('fmp_fetch.fmp_online.tqdm', lambda x, **kwargs: x):
+        result = fmp.realtime_batch_market_cap(symbols)
+    
+    # Verify the API calls were made correctly
+    assert mock_api.batch_market_cap.call_count == 2
+    mock_api.batch_market_cap.assert_any_call(symbols[:1000])
+    mock_api.batch_market_cap.assert_any_call(symbols[1000:])
+    
+    # Verify the result is a DataFrame with the expected structure
+    assert isinstance(result, pd.DataFrame)
+    assert set(result.columns) == {'symbol', 'market_cap'}
+    
+    # Verify the DataFrame contains the expected data
+    assert len(result) == 1201
+    
+    # Check some values
+    assert result.loc[result['symbol'] == 'SYMBOL1', 'market_cap'].values[0] == 1000000000.0
+    assert result.loc[result['symbol'] == 'SYMBOL1000', 'market_cap'].values[0] == 1000000000000.0
+    assert result.loc[result['symbol'] == 'SYMBOL1201', 'market_cap'].values[0] == 1201000000000.0
+
+
+def test_realtime_batch_market_cap_api_failure(mock_fmp_online):
+    """Test the realtime_batch_market_cap method when the API call fails."""
+    fmp, mock_api = mock_fmp_online
+    
+    # Configure mock to return None (API failure)
+    mock_api.batch_market_cap.return_value = None
+    
+    # Call the method
+    with patch('fmp_fetch.fmp_online.tqdm', lambda x, **kwargs: x):
+        result = fmp.realtime_batch_market_cap(['AAPL', 'MSFT'])
+    
+    # Verify the API call was made
+    mock_api.batch_market_cap.assert_called_once_with(['AAPL', 'MSFT'])
+    
+    # Verify the result is an empty DataFrame with the expected columns
+    assert isinstance(result, pd.DataFrame)
+    assert set(result.columns) == {'symbol', 'market_cap'}
+    assert len(result) == 0

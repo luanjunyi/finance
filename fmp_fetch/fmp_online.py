@@ -38,6 +38,75 @@ class FMPOnline:
     def get_close_price(self, symbol: str, date: str):
         return self.get_price(symbol, date)['adjClose']  
       
+    def realtime_batch_price_quote(self, symbols: List[str]) -> pd.DataFrame:
+        """
+        Get real-time price quotes for a batch of symbols.
+        
+        Args:
+            symbols (List[str]): List of stock symbols to get quotes for.
+            
+        Returns:
+            pd.DataFrame: DataFrame with symbol and current_price columns.
+        """
+        # FMP API can handle at most 1000 symbols at a time
+        MAX_BATCH_SIZE = 1000
+        all_results = []
+        
+        # Process symbols in batches of MAX_BATCH_SIZE with progress bar
+        batch_count = (len(symbols) + MAX_BATCH_SIZE - 1) // MAX_BATCH_SIZE
+        for i in tqdm(range(0, len(symbols), MAX_BATCH_SIZE), total=batch_count, desc="Fetching price quotes"):
+            batch_symbols = symbols[i:i + MAX_BATCH_SIZE]
+            self.logger.debug(f"Fetching batch price quotes for {len(batch_symbols)} symbols (batch {i//MAX_BATCH_SIZE + 1})")
+            
+            q = self.api.batch_price_quote(batch_symbols)
+            if not q:
+                self.logger.warning(f"Failed to get batch price quotes for batch {i//MAX_BATCH_SIZE + 1}")
+                continue
+                
+            all_results.extend(q)
+        
+        if not all_results:
+            self.logger.warning(f"Failed to get any batch price quotes for {len(symbols)} symbols")
+            return pd.DataFrame(columns=['symbol', 'current_price'])
+            
+        # Extract only the symbol and price columns and rename price to current_price
+        df = pd.DataFrame(all_results)[['symbol', 'price']].rename(columns={'price': 'current_price'})
+        return df
+
+    def realtime_batch_market_cap(self, symbols: List[str]) -> pd.DataFrame:
+        """
+        Get real-time market cap for a batch of symbols.
+        
+        Args:
+            symbols (List[str]): List of stock symbols to get market cap for.
+            
+        Returns:
+            pd.DataFrame: DataFrame with symbol and market_cap columns.
+        """
+        # FMP API can handle at most 1000 symbols at a time
+        MAX_BATCH_SIZE = 1000
+        all_results = []
+        
+        # Process symbols in batches of MAX_BATCH_SIZE with progress bar
+        batch_count = (len(symbols) + MAX_BATCH_SIZE - 1) // MAX_BATCH_SIZE
+        for i in tqdm(range(0, len(symbols), MAX_BATCH_SIZE), total=batch_count, desc="Fetching market caps"):
+            batch_symbols = symbols[i:i + MAX_BATCH_SIZE]
+            self.logger.debug(f"Fetching batch market cap for {len(batch_symbols)} symbols (batch {i//MAX_BATCH_SIZE + 1})")
+            
+            q = self.api.batch_market_cap(batch_symbols)
+            if not q:
+                self.logger.warning(f"Failed to get batch market cap for batch {i//MAX_BATCH_SIZE + 1}")
+                continue
+                
+            all_results.extend(q)
+        
+        if not all_results:
+            self.logger.warning(f"Failed to get any batch market cap for {len(symbols)} symbols")
+            return pd.DataFrame(columns=['symbol', 'market_cap'])
+            
+        # Extract only the symbol and market cap columns
+        df = pd.DataFrame(all_results)[['symbol', 'marketCap']].rename(columns={'marketCap': 'market_cap'})
+        return df
 
     def get_pe_ratio(self, symbol: str, date: str):
         """Get the PE ratio for a given symbol and date, using the last 4 quarters of EPS data.
