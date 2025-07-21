@@ -297,3 +297,11 @@ CREATE TABLE IF NOT EXISTS metrics (
   PRIMARY KEY (symbol, date)
 );
 CREATE INDEX IF NOT EXISTS idx_metrics_symbol ON metrics(symbol);
+
+-- Suspicious Symbols table
+CREATE TABLE IF NOT EXISTS suspicious_symbols (
+    symbol VARCHAR(10) PRIMARY KEY,
+    reason TEXT,
+    bad_type TEXT CHECK( bad_type IN ('PRICE_HOLE') ) NOT NULL,
+    date_added DATE DEFAULT (DATE('now'))
+);

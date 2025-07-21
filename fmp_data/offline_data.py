@@ -241,4 +241,14 @@ class OfflineData:
             """
             df = pd.read_sql_query(query, conn)
             return df['symbol'].tolist()
+
+    @classmethod
+    def get_suspicious_symbols(cls, db_path: str = FMP_DB_PATH) -> List[str]:
+        with sqlite3.connect(f'file:{db_path}?mode=ro', uri=True) as conn:
+            query = """
+            SELECT DISTINCT symbol
+            FROM suspicious_symbols
+            """
+            df = pd.read_sql_query(query, conn)
+            return df['symbol'].tolist()
         

@@ -45,6 +45,6 @@ ENV/
 
 # Project specific
 missing_data.log
+bad_data.txt
 research/local/*
 .coverage
-
