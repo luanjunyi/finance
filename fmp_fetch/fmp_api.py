@@ -2,7 +2,7 @@ import time
 import logging
 import requests
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from functools import cache
 from utils.logging_config import setup_logging as setup_global_logging
 from utils.config import FMP_API_KEY
@@ -187,6 +187,24 @@ class FMPAPI:
     def spx_constituents(self):
         spx = self.make_request('sp500-constituent')
         return [x['symbol'] for x in spx]
+
+    def batch_price_quote(self, symbols: List[str]):
+        assert len(symbols) > 0
+        return self.make_request(
+            'batch-quote-short',
+            {
+                'symbols': ','.join(symbols),
+            }
+        )
+
+    def batch_market_cap(self, symbols: List[str]):
+        assert len(symbols) > 0
+        return self.make_request(
+            'market-capitalization-batch',
+            {
+                'symbols': ','.join(symbols),
+            }
+        )
     
 
 # Example usage
