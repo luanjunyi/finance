@@ -188,7 +188,7 @@ class OfflineData:
             yield symbol, result
     
     @classmethod
-    def historical_tradable_price(cls, symbol: str, start_date: str, end_date: str, db_path: str = FMP_DB_PATH):
+    def historical_tradable_price_fmp(cls, symbol: str, start_date: str, end_date: str, db_path: str = FMP_DB_PATH):
         """Get historical tradable price for a symbol in a date range.
         
         If there are gaps in the price data (days without data), the method will fill
@@ -211,6 +211,63 @@ class OfflineData:
             # Calculate tradable price as average of high and low
             df['tradable_price'] = df.apply(lambda row: (row['high'] + row['low']) / 2, axis=1)
             df.drop(columns=['high', 'low'], inplace=True)
+            
+            # Create a continuous date range to fill gaps
+            date_range = pd.date_range(start=start_date, end=end_date, freq='D')
+            template = pd.DataFrame({'date': date_range})
+            template['symbol'] = symbol
+            
+            # Convert date columns to datetime for proper merging
+            df['date'] = pd.to_datetime(df['date'])
+            template['date'] = pd.to_datetime(template['date'])
+            
+            # Merge with the template to include all dates
+            merged = pd.merge(template, df, on=['symbol', 'date'], how='left')
+            
+            # Forward fill the tradable_price column to use last available price for gaps
+            merged['tradable_price'] = merged['tradable_price'].ffill()
+            
+            # Convert date back to string format for consistency
+            merged['date'] = merged['date'].dt.strftime('%Y-%m-%d')
+            
+            return merged
+
+    @classmethod
+    def historical_tradable_price(cls, symbol: str, start_date: str, end_date: str, db_path: str = FMP_DB_PATH):
+        """Get historical tradable price for a symbol in a date range using EODHD data.
+        
+        Uses adjusted_close prices from daily_price_eodhd table. If there are gaps in the 
+        price data (days without data), the method will fill these gaps using the last 
+        available price data.
+        
+        Args:
+            symbol (str): Stock symbol
+            start_date (str): Start date in 'YYYY-MM-DD' format
+            end_date (str): End date in 'YYYY-MM-DD' format
+            db_path (str): Path to SQLite database
+            
+        Returns:
+            pd.DataFrame: DataFrame with columns ['symbol', 'date', 'tradable_price']
+        """
+        with sqlite3.connect(f'file:{db_path}?mode=ro', uri=True) as conn:
+            query = """
+            SELECT symbol, date, high, low, close, adjusted_close
+            FROM daily_price_eodhd
+            WHERE symbol = ?
+            AND date BETWEEN ? AND ?
+            ORDER BY date
+            """
+            params = [symbol, start_date, end_date]
+            df = pd.read_sql_query(query, conn, params=tuple(params))
+            
+            if df.empty:
+                return df.drop(columns=['high', 'low', 'close', 'adjusted_close'] if len(df.columns) > 2 else [])
+            
+            # Calculate tradable price as average of high and low, then adjust it
+            # Adjustment factor is adjusted_close / close
+            df['adjustment_factor'] = df['adjusted_close'] / df['close']
+            df['tradable_price'] = ((df['high'] + df['low']) / 2) * df['adjustment_factor']
+            df.drop(columns=['high', 'low', 'close', 'adjusted_close', 'adjustment_factor'], inplace=True)
             
             # Create a continuous date range to fill gaps
             date_range = pd.date_range(start=start_date, end=end_date, freq='D')
