@@ -1,0 +1,12 @@
+aiohttp
+matplotlib
+numpy
+pandas
+playwright
+pytest
+Requests
+setuptools
+tqdm
+yfinance
+python-dotenv
+pandasgui
