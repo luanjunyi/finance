@@ -11,6 +11,10 @@ class FMPOnline:
     A non-async wrapper for FMP API functions.
     This class provides synchronous versions of the functions used in fmp_crawler.
     """
+
+    # FMP API can handle at most 1000 symbols at a time
+    MAX_BATCH_SIZE = 1000
+
     def __init__(self):
         self.api = FMPAPI()
 
@@ -48,19 +52,17 @@ class FMPOnline:
         Returns:
             pd.DataFrame: DataFrame with symbol and current_price columns.
         """
-        # FMP API can handle at most 1000 symbols at a time
-        MAX_BATCH_SIZE = 1000
         all_results = []
         
         # Process symbols in batches of MAX_BATCH_SIZE with progress bar
-        batch_count = (len(symbols) + MAX_BATCH_SIZE - 1) // MAX_BATCH_SIZE
-        for i in tqdm(range(0, len(symbols), MAX_BATCH_SIZE), total=batch_count, desc="Fetching price quotes"):
-            batch_symbols = symbols[i:i + MAX_BATCH_SIZE]
-            self.logger.debug(f"Fetching batch price quotes for {len(batch_symbols)} symbols (batch {i//MAX_BATCH_SIZE + 1})")
+        batch_count = (len(symbols) + FMPOnline.MAX_BATCH_SIZE - 1) // FMPOnline.MAX_BATCH_SIZE
+        for i in tqdm(range(0, len(symbols), FMPOnline.MAX_BATCH_SIZE), total=batch_count, desc="Fetching price quotes"):
+            batch_symbols = symbols[i:i + FMPOnline.MAX_BATCH_SIZE]
+            self.logger.debug(f"Fetching batch price quotes for {len(batch_symbols)} symbols (batch {i//FMPOnline.MAX_BATCH_SIZE + 1})")
             
             q = self.api.batch_price_quote(batch_symbols)
             if not q:
-                self.logger.warning(f"Failed to get batch price quotes for batch {i//MAX_BATCH_SIZE + 1}")
+                self.logger.warning(f"Failed to get batch price quotes for batch {i//FMPOnline.MAX_BATCH_SIZE + 1}")
                 continue
                 
             all_results.extend(q)
@@ -83,19 +85,17 @@ class FMPOnline:
         Returns:
             pd.DataFrame: DataFrame with symbol and market_cap columns.
         """
-        # FMP API can handle at most 1000 symbols at a time
-        MAX_BATCH_SIZE = 1000
         all_results = []
         
         # Process symbols in batches of MAX_BATCH_SIZE with progress bar
-        batch_count = (len(symbols) + MAX_BATCH_SIZE - 1) // MAX_BATCH_SIZE
-        for i in tqdm(range(0, len(symbols), MAX_BATCH_SIZE), total=batch_count, desc="Fetching market caps"):
-            batch_symbols = symbols[i:i + MAX_BATCH_SIZE]
-            self.logger.debug(f"Fetching batch market cap for {len(batch_symbols)} symbols (batch {i//MAX_BATCH_SIZE + 1})")
+        batch_count = (len(symbols) + FMPOnline.MAX_BATCH_SIZE - 1) // FMPOnline.MAX_BATCH_SIZE
+        for i in tqdm(range(0, len(symbols), FMPOnline.MAX_BATCH_SIZE), total=batch_count, desc="Fetching market caps"):
+            batch_symbols = symbols[i:i + FMPOnline.MAX_BATCH_SIZE]
+            self.logger.debug(f"Fetching batch market cap for {len(batch_symbols)} symbols (batch {i//FMPOnline.MAX_BATCH_SIZE + 1})")
             
             q = self.api.batch_market_cap(batch_symbols)
             if not q:
-                self.logger.warning(f"Failed to get batch market cap for batch {i//MAX_BATCH_SIZE + 1}")
+                self.logger.warning(f"Failed to get batch market cap for batch {i//FMPOnline.MAX_BATCH_SIZE + 1}")
                 continue
                 
             all_results.extend(q)
