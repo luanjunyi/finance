@@ -64,16 +64,6 @@ class EODHDBatchPriceCrawler:
         
         return dates
 
-    def date_exists_in_db(self, date: str) -> bool:
-        """Check if we already have data for this date"""
-        cursor = self.db.cursor()
-        cursor.execute(
-            "SELECT COUNT(*) as count FROM daily_price_eodhd WHERE date = ?",
-            (date,)
-        )
-        result = cursor.fetchone()
-        return result['count'] > 0
-
     def save_price_data(self, price_data: List[Dict[str, Any]], date: str):
         """Save price data to the database"""
         cursor = self.db.cursor()
@@ -137,13 +127,13 @@ class EODHDBatchPriceCrawler:
             logging.error(f"Error fetching data for {date}: {e}")
             return 0
 
-    def crawl_historical_prices(self, days_back: int = 30 * 365, skip_existing: bool = True):
+    def crawl_historical_prices(self, days_back: int = 30 * 365, ignore_date_after: str = None):
         """
         Main method to crawl historical price data
         
         Args:
             days_back: Number of days to go back (default: 30 years)
-            skip_existing: Whether to skip dates that already exist in DB
+            ignore_date_after: Skip dates on or after this date (format: YYYY-MM-DD)
         """
         logging.info(f"Starting historical price crawl for {days_back} days back")
         
@@ -152,14 +142,12 @@ class EODHDBatchPriceCrawler:
         
         with tqdm(total=len(dates), desc="Crawling price history from EODHD") as pbar:
             for date in dates:
-                if date >= '2023-12-01':
-                    print(f"[TEMP FIX, REMOVE AFTER RUN] Skipping {date}")
-                    continue
-                pbar.set_description(f"Processing {date}")
-                
-                if skip_existing and self.date_exists_in_db(date):
+                if ignore_date_after and date >= ignore_date_after:
+                    logging.info(f"Skipping {date} (after ignore date {ignore_date_after})")
                     pbar.update(1)
                     continue
+                    
+                pbar.set_description(f"Processing {date}")
                 
                 saved_count = self.fetch_and_save_date(date)
                 total_saved += saved_count
@@ -183,8 +171,8 @@ def main():
     parser.add_argument('--db-path', required=True, help='Path to SQLite database')
     parser.add_argument('--days-back', type=int, default=30*365, 
                        help='Number of days to go back (default: 30 years)')
-    parser.add_argument('--no-skip-existing', action='store_true',
-                       help='Do not skip dates that already exist in database')
+    parser.add_argument('--ignore-date-after', type=str,
+                       help='Skip dates on or after this date (format: YYYY-MM-DD)')
     
     args = parser.parse_args()
     
@@ -193,7 +181,7 @@ def main():
         crawler = EODHDBatchPriceCrawler(args.db_path)
         crawler.crawl_historical_prices(
             days_back=args.days_back,
-            skip_existing=not args.no_skip_existing
+            ignore_date_after=args.ignore_date_after
         )
     except KeyboardInterrupt:
         logging.info("Crawl interrupted by user")
