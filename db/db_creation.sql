@@ -305,3 +305,16 @@ CREATE TABLE IF NOT EXISTS suspicious_symbols (
     bad_type TEXT CHECK( bad_type IN ('PRICE_HOLE') ) NOT NULL,
     date_added DATE DEFAULT (DATE('now'))
 );
+
+-- Price history from EODHD
+CREATE TABLE IF NOT EXISTS daily_price_eodhd (
+  symbol VARCHAR(10),
+  date DATE NOT NULL,
+  open DECIMAL(10, 2),
+  high DECIMAL(10, 2),
+  low DECIMAL(10, 2),
+  close DECIMAL(10, 2),
+  adjusted_close DECIMAL(10, 2),
+  volume BIGINT,
+  PRIMARY KEY (symbol, date)
+);

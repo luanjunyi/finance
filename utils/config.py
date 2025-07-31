@@ -17,3 +17,4 @@ def read_config_from_env_or_die(name: str):
 # For direct imports like: from utils.config import DB_PATH, API_KEY
 FMP_DB_PATH = read_config_from_env_or_die("FMP_DB_PATH")
 FMP_API_KEY = read_config_from_env_or_die("FMP_API_KEY")
+EODHD_API_KEY = read_config_from_env_or_die("EODHD_API_KEY")
