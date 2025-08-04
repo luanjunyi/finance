@@ -23,8 +23,8 @@ class BaseFMPCrawler:
         self.setup_logging()
 
         # Setup database
-        self.db = sqlite3.connect(db_path)
         self.create_tables(db_path)
+        self.db = sqlite3.connect(db_path)
         self.db.row_factory = sqlite3.Row
 
     def setup_logging(self):
