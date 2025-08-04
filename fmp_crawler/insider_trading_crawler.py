@@ -27,7 +27,7 @@ class InsiderTradingCrawler(BaseFMPCrawler):
         data = await self.make_request(endpoint, params=params)
 
         if not data:
-            logging.warning(f"Failed to fetch insider statement for {symbol}")
+            logging.warning(f"Insider statement not found for {symbol}")
             return
 
         cursor = self.db.cursor()
