@@ -1,18 +1,18 @@
 import argparse
-from datetime import datetime, timedelta
-
-from base_fmp_crawler import BaseFMPCrawler
-import time
 import asyncio
 import logging
+import time
+
 from tqdm import tqdm
+
+from base_fmp_crawler import BaseFMPCrawler
 
 INSIDER_TRADING_MAX_LIMIT = 1000
 INSIDER_TRADING_MIN_PAGE = 0
 INSIDER_TRADING_MAX_PAGE = 100
 
 
-class InsiderCrawler(BaseFMPCrawler):
+class InsiderTradingCrawler(BaseFMPCrawler):
     async def crawl_insider_trading(self, symbol: str):
         if self.skip_existing:
             cursor = self.db.cursor()
@@ -84,7 +84,7 @@ async def main():
     args = parser.parse_args()
     print(args)
 
-    crawler = InsiderCrawler(args.db_path)
+    crawler = InsiderTradingCrawler(args.db_path)
     await crawler.crawl(args.symbols)
     crawler.close()
 
