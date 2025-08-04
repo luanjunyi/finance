@@ -1,11 +1,17 @@
-import time
 import logging
-import requests
+import time
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, List
 from functools import cache
-from utils.logging_config import setup_logging as setup_global_logging
+from typing import Optional, Dict, Any, List
+
+import requests
+
 from utils.config import FMP_API_KEY
+from utils.logging_config import setup_logging as setup_global_logging
+
+INSIDER_TRADING_MAX_LIMIT = 1000
+INSIDER_TRADING_MIN_PAGE = 0
+INSIDER_TRADING_MAX_PAGE = 100
 
 
 class FMPAPI:
@@ -13,6 +19,7 @@ class FMPAPI:
     A non-async wrapper for FMP API functions.
     This class provides synchronous versions of the functions used in fmp_crawler.
     """
+
     def __init__(self):
         self.api_key = FMP_API_KEY
 
@@ -43,10 +50,10 @@ class FMPAPI:
         # Initialize params if None
         if params is None:
             params = {}
-            
+
         # Add API key to params
         params['apikey'] = self.api_key
-        
+
         # Rate limiting
         now = time.time()
         time_since_last = now - self.last_request_time
@@ -84,8 +91,19 @@ class FMPAPI:
     @cache
     def get_all_tradable_symbols(self):
         return self.make_request('available-traded/list', base_url='https://financialmodelingprep.com/api/v3')
-    
 
+    @cache
+    def get_insider_trading(self, symbol: str = None, page=0, limit=None):
+        limit = limit or INSIDER_TRADING_MAX_LIMIT
+        if limit < 0 or limit > INSIDER_TRADING_MAX_LIMIT:
+            raise ValueError(f'Limit cannot be greater than {INSIDER_TRADING_MAX_LIMIT}')
+        if page < INSIDER_TRADING_MIN_PAGE or page > INSIDER_TRADING_MAX_PAGE:
+            raise ValueError(f'Page must be between 0 and 100')
+        endpoint = 'insider-trading/search'
+        params = {'transactionType': 'P-Purchase', 'page': page, 'limit': limit}
+        if symbol:
+            params['symbol'] = symbol
+        return self.make_request(endpoint, params=params)
 
     # Price fetching functions
     @cache
@@ -147,7 +165,7 @@ class FMPAPI:
             }
         )
         return cashflow_statement
-        
+
     @cache
     def get_balance_sheet(self, symbol: str, period: str = 'quarter', limit: int = 120):
         balance_sheet = self.make_request(
@@ -205,17 +223,17 @@ class FMPAPI:
                 'symbols': ','.join(symbols),
             }
         )
-    
+
 
 # Example usage
 if __name__ == "__main__":
     fmp = FMPOnline()
-    
+
     # Example: Get price data for AAPL
     from_date = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
     to_date = datetime.now().strftime('%Y-%m-%d')
     prices = fmp.get_price('AAPL', from_date, to_date)
-    
+
     if prices:
         print(f"Got {len(prices)} price records for AAPL")
         print(f"Latest price: {prices[0]}")
