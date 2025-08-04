@@ -75,7 +75,7 @@ def test_initialization_missing_api_key(monkeypatch):
 
 
 @patch("fmp_fetch.fmp_api.requests.get")
-def test_fetch_data(mock_get):
+def test_get_insider_trading(mock_get):
     # Setup mock response
     mock_response = mock_get.return_value
     fake_json = [{"key": "value"}]
@@ -93,7 +93,7 @@ def test_fetch_data(mock_get):
 
 
 @patch("fmp_fetch.fmp_api.requests.get")
-def test_fetch_data_with_symbol(mock_get):
+def test_get_insider_trading_with_symbol(mock_get):
     # Setup mock response
     mock_response = mock_get.return_value
     fake_json = [{"key": "value"}]
@@ -111,7 +111,7 @@ def test_fetch_data_with_symbol(mock_get):
 
 
 @patch("fmp_fetch.fmp_api.requests.get")
-def test_fetch_data_with_page(mock_get):
+def test_get_insider_trading_with_page(mock_get):
     # Setup mock response
     mock_response = mock_get.return_value
     fake_json = [{"key": "value"}]
@@ -129,7 +129,7 @@ def test_fetch_data_with_page(mock_get):
 
 
 @patch("fmp_fetch.fmp_api.requests.get")
-def test_fetch_data_with_limit(mock_get):
+def test_get_insider_trading_with_limit(mock_get):
     # Setup mock response
     mock_response = mock_get.return_value
     fake_json = [{"key": "value"}]
@@ -148,7 +148,7 @@ def test_fetch_data_with_limit(mock_get):
 
 @patch("fmp_fetch.fmp_api.requests.get")
 @pytest.mark.parametrize("limit", [-1, 1001])
-def test_fetch_data_with_invalid_limit(mock_get, limit):
+def test_get_insider_trading_with_invalid_limit(mock_get, limit):
     # Setup mock response
     mock_response = mock_get.return_value
     fake_json = [{"key": "value"}]
@@ -162,7 +162,7 @@ def test_fetch_data_with_invalid_limit(mock_get, limit):
 
 @patch("fmp_fetch.fmp_api.requests.get")
 @pytest.mark.parametrize("page", [-1, 101])
-def test_fetch_data_with_invalid_page(mock_get, page):
+def test_get_insider_trading_with_invalid_page(mock_get, page):
     # Setup mock response
     mock_response = mock_get.return_value
     fake_json = [{"key": "value"}]
