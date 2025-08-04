@@ -83,7 +83,7 @@ class OfflineData:
                     locations.append(table)
             
             if len(locations) > 1:
-                logging.warning(f"Metric '{metric}' found in multiple tables: {locations}. Using {locations[0]}")
+                logging.debug(f"Metric '{metric}' found in multiple tables: {locations}. Using {locations[0]}")
             if len(locations) == 0:
                 raise ValueError(f"Metric '{metric}' not found in any table")
             metric_locations[metric] = locations[0]
@@ -255,9 +255,15 @@ class OfflineData:
             FROM daily_price_eodhd
             WHERE symbol = ?
             AND date BETWEEN ? AND ?
+            AND volume > 0
+            AND date > (
+                SELECT MIN(date) 
+                FROM daily_price_eodhd 
+                WHERE symbol = ?
+            )
             ORDER BY date
-            """
-            params = [symbol, start_date, end_date]
+            """  # We exclude the first day from each symbol to avoid wrong data in IPO day.
+            params = [symbol, start_date, end_date, symbol]
             df = pd.read_sql_query(query, conn, params=tuple(params))
             
             if df.empty:
