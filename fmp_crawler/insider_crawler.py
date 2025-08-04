@@ -63,7 +63,7 @@ class InsiderCrawler(BaseFMPCrawler):
             ))
 
     async def crawl(self, symbols=None):
-        logging.info("Starting price crawling...")
+        logging.info("Starting insider crawling...")
         start_time = time.time()
 
         if symbols is None:
@@ -74,7 +74,7 @@ class InsiderCrawler(BaseFMPCrawler):
             self.db.commit()
 
         elapsed = time.time() - start_time
-        logging.info(f"Price crawling completed in {elapsed:.2f} seconds")
+        logging.info(f"Insider crawling completed in {elapsed:.2f} seconds")
 
 
 async def main():
