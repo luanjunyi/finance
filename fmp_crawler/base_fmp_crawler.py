@@ -1,3 +1,4 @@
+import os.path
 import time
 import logging
 import aiohttp
@@ -23,6 +24,7 @@ class BaseFMPCrawler:
 
         # Setup database
         self.db = sqlite3.connect(db_path)
+        self.create_tables(db_path)
         self.db.row_factory = sqlite3.Row
 
     def setup_logging(self):
@@ -92,3 +94,20 @@ class BaseFMPCrawler:
                 AND type = 'stock'
         ''')
         return [row['symbol'] for row in cursor.fetchall()]
+
+    @staticmethod
+    def create_tables(db_path: str):
+        parent = os.path.dirname(os.path.dirname(__file__))
+        sql_file_path = os.path.join(parent, 'db', 'db_creation.sql')
+
+        # Connect to the database
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        # Read and execute the SQL script
+        with open(sql_file_path, 'r') as f:
+            sql_script = f.read()
+
+        cursor.executescript(sql_script)
+        conn.commit()
+        conn.close()
