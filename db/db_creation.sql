@@ -318,3 +318,23 @@ CREATE TABLE IF NOT EXISTS daily_price_eodhd (
   volume BIGINT,
   PRIMARY KEY (symbol, date)
 );
+
+-- Insider trading
+CREATE TABLE IF NOT EXISTS insider_trading (
+  symbol VARCHAR(10),
+  filingDate DATE NOT NULL,
+  transactionDate DATE NOT NULL,
+  reportingCik VARCHAR(10),
+  companyCik VARCHAR(10),
+  transactionType VARCHAR(20),
+  securitiesOwned BIGINT,
+  reportingName VARCHAR(100),
+  typeOfOwner VARCHAR(200),
+  acquisitionOrDisposition VARCHAR(1),
+  formType VARCHAR(1),
+  directOrIndirect VARCHAR(1),
+  securitiesTransacted BIGINT,
+  price DECIMAL(10, 2),
+  securityName VARCHAR(200),
+  PRIMARY KEY (symbol, filingDate)
+);
