@@ -27,7 +27,7 @@ class InsiderTradingCrawler(BaseFMPCrawler):
         data = await self.make_request(endpoint, params=params)
 
         if not data:
-            logging.warning(f"Insider statement not found for {symbol}")
+            logging.info(f"No insider statement for {symbol} at page {page}")
             return False
 
         cursor = self.db.cursor()
@@ -71,13 +71,11 @@ class InsiderTradingCrawler(BaseFMPCrawler):
             symbols = self.get_symbols_to_crawl()
 
         for symbol in tqdm(symbols, desc="Crawling symbols"):
-            page = 0
-            while True:
-                if not await self.crawl_insider_trading(symbol, page):
+            for page in range(INSIDER_TRADING_MIN_PAGE, INSIDER_TRADING_MAX_PAGE + 1):
+                if await self.crawl_insider_trading(symbol, page):
+                    self.db.commit()
+                else:
                     break
-                page += 1
-
-            self.db.commit()
 
         elapsed = time.time() - start_time
         logging.info(f"Insider crawling completed in {elapsed:.2f} seconds")
