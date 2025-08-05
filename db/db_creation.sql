@@ -336,5 +336,5 @@ CREATE TABLE IF NOT EXISTS insider_trading (
   securitiesTransacted BIGINT,
   price DECIMAL(10, 2),
   securityName VARCHAR(200),
-  PRIMARY KEY (symbol, filingDate)
+  PRIMARY KEY (symbol, filingDate, reportingCik)
 );

@@ -13,22 +13,22 @@ INSIDER_TRADING_MAX_PAGE = 100
 
 
 class InsiderTradingCrawler(BaseFMPCrawler):
-    async def crawl_insider_trading(self, symbol: str):
+    async def crawl_insider_trading(self, symbol: str, page: int) -> bool:
         if self.skip_existing:
             cursor = self.db.cursor()
             # Check if the record already exists
             cursor.execute("SELECT 1 FROM insider_trading WHERE symbol = ? LIMIT 1",
                            (symbol,))
             if cursor.fetchone():
-                return
+                return False
 
         endpoint = 'insider-trading/search'
-        params = {'transactionType': 'P-Purchase', 'page': 0, 'limit': INSIDER_TRADING_MAX_LIMIT, 'symbol': symbol}
+        params = {'transactionType': 'P-Purchase', 'page': page, 'limit': INSIDER_TRADING_MAX_LIMIT, 'symbol': symbol}
         data = await self.make_request(endpoint, params=params)
 
         if not data:
             logging.warning(f"Insider statement not found for {symbol}")
-            return
+            return False
 
         cursor = self.db.cursor()
         for statement in data:
@@ -61,6 +61,7 @@ class InsiderTradingCrawler(BaseFMPCrawler):
                 statement.get('price'),
                 statement.get('securityName'),
             ))
+        return True
 
     async def crawl(self, symbols=None):
         logging.info("Starting insider crawling...")
@@ -70,7 +71,12 @@ class InsiderTradingCrawler(BaseFMPCrawler):
             symbols = self.get_symbols_to_crawl()
 
         for symbol in tqdm(symbols, desc="Crawling symbols"):
-            await self.crawl_insider_trading(symbol)
+            page = 0
+            while True:
+                if not await self.crawl_insider_trading(symbol, page):
+                    break
+                page += 1
+
             self.db.commit()
 
         elapsed = time.time() - start_time
