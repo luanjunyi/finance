@@ -26,8 +26,8 @@ class InsiderTradingCrawler(BaseFMPCrawler):
         params = {'transactionType': 'P-Purchase', 'page': page, 'limit': INSIDER_TRADING_MAX_LIMIT, 'symbol': symbol}
         data = await self.make_request(endpoint, params=params)
 
-        if not data:
-            logging.info(f"No insider statement for {symbol} at page {page}")
+        if not data and page == INSIDER_TRADING_MIN_PAGE:
+            logging.warning(f"Insider statement not found for {symbol}")
             return False
 
         cursor = self.db.cursor()
