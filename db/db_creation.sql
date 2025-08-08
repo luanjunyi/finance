@@ -335,6 +335,5 @@ CREATE TABLE IF NOT EXISTS insider_trading (
   directOrIndirect VARCHAR(1), -- 'D' or 'I'
   securitiesTransacted BIGINT, -- Number of shares transacted
   price DECIMAL(10, 2), -- Price per share
-  securityName VARCHAR(200), -- Name of the security
-  PRIMARY KEY (symbol, filingDate, reportingCik) -- Composite primary key
+  securityName VARCHAR(200) -- Name of the security
 );
