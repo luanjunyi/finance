@@ -319,22 +319,21 @@ CREATE TABLE IF NOT EXISTS daily_price_eodhd (
   PRIMARY KEY (symbol, date)
 );
 
--- Insider trading
+-- Insider trading table for storing SEC insider trading filings
 CREATE TABLE IF NOT EXISTS insider_trading (
-  symbol VARCHAR(10),
-  filingDate DATE NOT NULL,
-  transactionDate DATE NOT NULL,
-  reportingCik VARCHAR(10),
-  companyCik VARCHAR(10),
-  transactionType VARCHAR(20),
-  securitiesOwned BIGINT,
-  reportingName VARCHAR(100),
-  typeOfOwner VARCHAR(200),
-  acquisitionOrDisposition VARCHAR(1),
-  formType VARCHAR(1),
-  directOrIndirect VARCHAR(1),
-  securitiesTransacted BIGINT,
-  price DECIMAL(10, 2),
-  securityName VARCHAR(200),
-  PRIMARY KEY (symbol, filingDate, reportingCik)
+  symbol VARCHAR(10), -- Stock symbol
+  filingDate DATE NOT NULL, -- Date the form was filed
+  transactionDate DATE NOT NULL, -- Date the transaction occurred
+  reportingCik VARCHAR(10), -- Insider's CIK
+  companyCik VARCHAR(10), -- Issuer's CIK
+  transactionType VARCHAR(20), -- e.g. "S-Sale", "P-Purchase"
+  securitiesOwned BIGINT, -- Total owned after transaction
+  reportingName VARCHAR(100), -- Insider's name
+  typeOfOwner VARCHAR(200), -- e.g. "Officer", "Director"
+  acquisitionOrDisposition VARCHAR(1), -- 'A' or 'D'
+  formType VARCHAR(1), -- e.g. "4"
+  directOrIndirect VARCHAR(1), -- 'D' or 'I'
+  securitiesTransacted BIGINT, -- Number of shares transacted
+  price DECIMAL(10, 2), -- Price per share
+  securityName VARCHAR(200) -- Name of the security
 );
