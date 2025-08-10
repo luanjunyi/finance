@@ -5,7 +5,8 @@ import time
 
 from tqdm import tqdm
 
-from base_fmp_crawler import BaseFMPCrawler
+from fmp_crawler.base_fmp_crawler import BaseFMPCrawler
+from utils.config import FMP_DB_PATH
 
 INSIDER_TRADING_MAX_LIMIT = 1000
 INSIDER_TRADING_MIN_PAGE = 0
@@ -84,11 +85,11 @@ class InsiderTradingCrawler(BaseFMPCrawler):
 async def main():
     parser = argparse.ArgumentParser(description='Crawl insider trading from FMP')
     parser.add_argument('--symbols', nargs='+', help='List of stock symbols to crawl. If not provided, will crawl all symbols from the database.')
-    parser.add_argument('--db-path', required=True, help='Path to the database file that store the crawled result')
+    parser.add_argument('--db-path', help='Path to the database file that store the crawled result')
     args = parser.parse_args()
     print(args)
 
-    crawler = InsiderTradingCrawler(args.db_path)
+    crawler = InsiderTradingCrawler(args.db_path or FMP_DB_PATH)
     await crawler.crawl(args.symbols)
     crawler.close()
 
