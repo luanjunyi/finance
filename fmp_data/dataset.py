@@ -9,10 +9,10 @@ import logging
 from typing import List, Union
 import pandas as pd
 import numpy as np
+from tqdm import tqdm
 
 from fmp_data.offline_data import OfflineData
 from fmp_data.metric_calculator import DERIVED_METRICS
-from utils.logging_config import setup_logging as setup_global_logging
 from utils.config import FMP_DB_PATH
 
 class Dataset:
@@ -64,7 +64,7 @@ class Dataset:
         """
         Generate the dataset.
         """
-        for symbol in self.symbols:
+        for symbol in tqdm(self.symbols, desc="Generating dataset"):
             symbol_df = None
             derived_df = None
             if self.direct_metrics:
@@ -83,9 +83,15 @@ class Dataset:
                 symbol_df = derived_df
             elif derived_df is not None:
                 symbol_df = pd.merge(symbol_df, derived_df, on=['symbol', 'filing_date'], how='outer')
-            if symbol_df.empty:
+            if symbol_df is None and not self.with_price:
                 continue
-            symbol_df = self.fill_date_gaps(symbol_df)
+            if symbol_df is not None and not symbol_df.empty:
+                symbol_df = self.fill_date_gaps(symbol_df)
+            else:
+                symbol_df = pd.DataFrame({
+                    'symbol': symbol,
+                    'date': pd.date_range(start=self.start_date, end=self.end_date, freq='D')
+                })
             if self.with_price:
                 price_df = OfflineData.historical_tradable_price(symbol, self.start_date, self.end_date, db_path=self.db_path)
                 price_df['date'] = pd.to_datetime(price_df['date'])

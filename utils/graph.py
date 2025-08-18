@@ -1,7 +1,8 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt 
-from typing import List
+from typing import List, Dict
+from fmp_data import OfflineData
 
 def per_group_return_graph(data, cut_column, min_value, max_value, num_bins=40, extra_title=""):
     assert cut_column in data.columns
@@ -129,4 +130,16 @@ def price_history_graph(data: List[pd.DataFrame], title=""):
     plt.ylabel("Relative Price")
     plt.xlabel("Time")
     plt.title(title)
+    
+def price_history_range(symbols: List[str], start_date: str, end_date: str, mark_dates: Dict[str, str] = {}):
+    import logging
+    logging.getLogger('matplotlib').setLevel(logging.WARNING)
+    for s in symbols:
+        d = OfflineData.historical_tradable_price(s, start_date, end_date)
+        plt.plot(d.date, d.tradable_price, label=s)
+        for date, label in mark_dates.items():
+            plt.axvline(x=date, color='r', linestyle='--', label=label)
+    plt.gca().xaxis.set_major_locator(plt.MaxNLocator(10))
+    plt.legend()
+    plt.show()
     

@@ -177,7 +177,7 @@ class FMPOnline:
         self.logger.info(f"Fetching close prices for {len(symbols)} symbols from {start_date} to {end_date}")
         
         all_data = []
-        for symbol in tqdm(symbols):
+        for symbol in tqdm(symbols, desc="Fetching close prices"):
             if symbol.startswith('^'): # symbols start with '^' are index symbols need a different API endpoint
                 prices = self.api.index_prices(symbol, start_date, end_date)
                 for price in prices:
