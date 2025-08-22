@@ -299,11 +299,11 @@ class OfflineData:
     def get_us_active_stocks(cls, db_path: str = FMP_DB_PATH) -> List[str]:
         with sqlite3.connect(f'file:{db_path}?mode=ro', uri=True) as conn:
             query = """
-            SELECT symbol
+            SELECT symbol, sector, industry
             FROM valid_us_stocks_der
             """
             df = pd.read_sql_query(query, conn)
-            return df['symbol'].tolist()
+            return df
 
     @classmethod
     def get_suspicious_symbols(cls, db_path: str = FMP_DB_PATH) -> List[str]:
@@ -314,4 +314,40 @@ class OfflineData:
             """
             df = pd.read_sql_query(query, conn)
             return df['symbol'].tolist()
+
+    @classmethod
+    def is_in_spx(cls, symbol: str, date: Union[str, date], db_path: str = FMP_DB_PATH) -> bool:
+        """Check if a symbol was included in S&P 500 at a given date.
+        
+        Args:
+            symbol (str): Stock symbol to check
+            date (Union[str, date]): Date to check in 'YYYY-MM-DD' format or date object
+            db_path (str): Path to SQLite database
+            
+        Returns:
+            bool: True if the symbol was in S&P 500 at the given date, False otherwise
+        """
+        # Convert date to string if it's a date object
+        if isinstance(date, datetime):
+            date_str = date.strftime('%Y-%m-%d')
+        elif isinstance(date, date):
+            date_str = date.strftime('%Y-%m-%d')
+        else:
+            date_str = date
+            
+        with sqlite3.connect(f'file:{db_path}?mode=ro', uri=True) as conn:
+            # Get the most recent add/remove action for this symbol before or on the given date
+            query = """
+            SELECT type
+            FROM spx_constituent_changes
+            WHERE symbol = ? AND date <= ?
+            ORDER BY date DESC
+            LIMIT 1
+            """
+            params = [symbol, date_str]
+            cursor = conn.execute(query, params)
+            result = cursor.fetchone()
+                
+            # Return True if the most recent action was 'add', False if it was 'remove'
+            return result is not None and result[0] == 'add'
         

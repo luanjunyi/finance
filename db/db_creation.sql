@@ -337,3 +337,11 @@ CREATE TABLE IF NOT EXISTS insider_trading (
   price DECIMAL(10, 2), -- Price per share
   securityName VARCHAR(200) -- Name of the security
 );
+
+-- S&P 500 constituent changes table
+CREATE TABLE IF NOT EXISTS spx_constituent_changes (
+  symbol VARCHAR(10),
+  date DATE NOT NULL,
+  type VARCHAR(10) NOT NULL CHECK( type IN ('add', 'remove') )
+);
+CREATE INDEX IF NOT EXISTS idx_spx_constituent_symbol ON spx_constituent_changes(symbol);
