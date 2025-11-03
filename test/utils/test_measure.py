@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from datetime import datetime, timedelta
-from utils.measure import _below_vs_chord_sliding, below_chord, TOLERANCE
+from utils.measure import _below_vs_chord_sliding, below_chord, spmo_weights, TOLERANCE
 from typing import Tuple
 
 
@@ -244,7 +244,7 @@ def test_below_chord_with_symbols():
     })
     
     # Apply the by-symbol function
-    result = below_chord(df, window=30)
+    result = below_chord(df, window=30, price_col='price')
     
     # Check that all original rows are preserved
     assert len(result) == len(df)
@@ -424,3 +424,79 @@ def test_implementations_with_tolerance_edge_cases():
     # Results should be identical
     pd.testing.assert_frame_equal(vectorized_out, reference_out, check_dtype=False)
     pd.testing.assert_frame_equal(vectorized_mask, reference_mask, check_dtype=False)
+
+
+# SPMO Portfolio Tests
+
+def test_spmo_portfolio_select_by_momentum_and_market_cap():
+    """Test basic SPMO portfolio functionality with simple data."""
+    # Create test data with 10 stocks
+    data = pd.DataFrame({
+        'symbol': [f'STOCK{i:02d}' for i in range(10)],
+        'risk_adjusted_momentum':  [1.0, 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1],
+        'market_cap': [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000],
+        'sector': ['Tech', 'Tech', 'Finance', 'Finance', 'Healthcare', 
+                  'Healthcare', 'Energy', 'Energy', 'Consumer', 'Consumer']
+    })
+    
+    result = spmo_weights(data, n_top=10, stock_cap=1.0, sector_cap=1.0) # Ignore caps
+    
+    # Check that result is a DataFrame with same length as input
+    assert isinstance(result, pd.DataFrame)
+    assert len(result) == len(data)
+    
+    # Check that spmo_weight column is added
+    assert 'spmo_weight' in result.columns
+    
+    assert sum(result['spmo_weight'] > 0) == 10
+    assert pytest.approx(result['spmo_weight'].sum()) == 1.0
+    c = data['risk_adjusted_momentum'] * data['market_cap'] / sum(data['risk_adjusted_momentum'] * data['market_cap'])
+    assert pytest.approx(result['spmo_weight'].values) == c.values
+    
+
+
+def test_spmo_portfolio_stock_cap():
+    """Test individual stock cap functionality."""
+    # Create data where one stock would dominate without cap
+    data = pd.DataFrame({
+        'symbol': ['AAPL', 'MSFT', 'GOOG', 'AMZN', 'TSLA', 'META', 'NVDA', 'T', 'JPM', 'BAC'],
+        'risk_adjusted_momentum': [1.0, 0.5, 0.4, 0.3, 0.2, 0.1, 0.05, 0.01, 0.005, 0.001],
+        'market_cap': [3000, 2000, 1500, 1200, 800, 700, 600, 500, 400, 300],  # AAPL much larger
+        'sector': ['Tech', 'Tech', 'Tech', 'Consumer', 'Auto', 'Tech', 'Tech', 'Tech', 'Finance', 'Finance']
+    })
+    
+    # With 20% selection, all 5 stocks would be selected
+    # Set very low cap to test capping
+    result = spmo_weights(data, n_top=4, stock_cap=1/4, sector_cap=1.0)
+    
+    # Check that no stock exceeds the cap
+    max_weight = result['spmo_weight'].max()
+    assert max_weight <= 1/4 + 1e-9  # Allow small floating point error
+    
+    # Check that weights still sum to 1
+    total_weight = result['spmo_weight'].sum()
+    assert abs(total_weight - 1.0) < 1e-9
+
+
+def test_spmo_portfolio_sector_cap():
+    """Test sector cap functionality."""
+    # Create data with heavy concentration in one sector
+    data = pd.DataFrame({
+        'symbol': ['AAPL', 'BRK', 'GOOG', 'AMZN', 'TSLA', 'META', 'NVDA', 'T', 'JPM', 'BAC'],
+        'risk_adjusted_momentum': [1.0, 0.5, 0.4, 0.3, 0.2, 0.1, 0.05, 0.01, 0.005, 0.001],
+        'market_cap': [3000, 2000, 1500, 1200, 800, 700, 600, 500, 400, 300],  # AAPL much larger
+        'sector': ['Tech', 'Finance', 'Tech', 'Consumer', 'Auto', 'Tech', 'Tech', 'Tech', 'Finance', 'Finance']
+    })
+    
+    # With 20% selection, would select top ~1.4 stocks, so top 1 stock
+    # But let's test with all stocks to see sector capping
+    result = spmo_weights(data, n_top=10, stock_cap=1.0, sector_cap=1/4)  # 50% sector cap
+    
+    # Check sector weights don't exceed cap
+    sector_weights = result.groupby('sector')['spmo_weight'].sum()
+    max_sector_weight = sector_weights.max()
+    assert max_sector_weight <= 1/4 + 1e-9
+    assert pytest.approx(sector_weights.sum()) == 1.0
+    
+    # Check that total weights sum to 1
+    assert pytest.approx(result['spmo_weight'].sum()) == 1.0

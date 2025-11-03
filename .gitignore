@@ -35,7 +35,8 @@ ENV/
 *.csv
 # Logs
 *.log
-
+# Keys
+*.key
 # IDE specific files
 .idea/
 .vscode/
